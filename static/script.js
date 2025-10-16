@@ -276,7 +276,7 @@ document.addEventListener('DOMContentLoaded', () => {
         await type("=== SETTINGS ===");
         await type("[1] Persona Settings");
         await type(`[2] Change AI Name (Current: ${state.currentUser?.ai_name || 'AI'})`);
-        await type("[2] Accessibility");
+        await type("[3] Accessibility");
         await type("\nType 'exit' to return to the main menu.");
     }
 
@@ -316,6 +316,16 @@ document.addEventListener('DOMContentLoaded', () => {
         if (newName.toLowerCase() === 'exit') {
             await showSettingsMenu();
             state.appState = 'settings';
+            return;
+        }
+
+        // For registered users, first verify the session is still active on the server.
+        // If not, update the name locally to prevent an error.
+        const sessionCheckResponse = await fetch('/api/user_data');
+        if (!sessionCheckResponse.ok) {
+            state.currentUser.ai_name = newName;
+            localStorage.setItem('currentUser', JSON.stringify(state.currentUser));
+            await type(`AI name changed to ${newName}. (Local session)`);
             return;
         }
 
