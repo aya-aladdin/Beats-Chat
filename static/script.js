@@ -326,7 +326,10 @@ document.addEventListener('DOMContentLoaded', () => {
             state.currentUser.ai_name = newName;
             localStorage.setItem('currentUser', JSON.stringify(state.currentUser));
             await type(`AI name changed to ${newName}. (Local session)`);
-            return;
+            await new Promise(r => setTimeout(r, 1000));
+            clearScreen();
+            await showSettingsMenu();
+            state.appState = 'settings';
         }
 
         const response = await fetch('/api/set_ai_name', {
@@ -364,7 +367,10 @@ document.addEventListener('DOMContentLoaded', () => {
             state.currentUser.persona = personaKey;
             localStorage.setItem('currentUser', JSON.stringify(state.currentUser));
             await type(`Persona switched to ${personaKey}.`);
-            return;
+            await new Promise(r => setTimeout(r, 1000));
+            clearScreen();
+            await showSettingsMenu();
+            state.appState = 'settings';
         }
 
         // For registered users, first verify the session is still active on the server.
@@ -374,7 +380,10 @@ document.addEventListener('DOMContentLoaded', () => {
             state.currentUser.persona = personaKey;
             localStorage.setItem('currentUser', JSON.stringify(state.currentUser));
             await type(`Persona switched to ${personaKey}. (Local session)`);
-            return;
+            await new Promise(r => setTimeout(r, 1000));
+            clearScreen();
+            await showSettingsMenu();
+            state.appState = 'settings';
         }
 
         const response = await fetch('/api/set_persona', {
@@ -390,6 +399,10 @@ document.addEventListener('DOMContentLoaded', () => {
             if (state.currentUser) {
                 state.currentUser.persona = personaKey;
             }
+            await new Promise(r => setTimeout(r, 1000));
+            clearScreen();
+            await showSettingsMenu();
+            state.appState = 'settings';
         } else {
             await type(`Error: ${data.error}`);
         }
