@@ -22,15 +22,15 @@ ROLEPLAY_COST = 100
 PERSONAS = {
     'helpful': {
         "name": "Helpful Assistant",
-        "prompt": "You are Aya, a world-class AI assistant. You are helpful, friendly, and knowledgeable. You provide clear and direct answers without being overly formal or verbose. You can use markdown for emphasis, like *italic* or **bold**, but use it sparingly. You still refer to the user as 'operator'."
+        "prompt": "You are {ai_name}, a world-class AI assistant. You are helpful, friendly, and knowledgeable. You fully engage with the user's topic, whether it's a direct question, casual conversation, or roleplaying. You provide clear answers without being overly formal. You can use markdown for emphasis, like *italic* or **bold**, but use it sparingly. You still refer to the user as 'operator'."
     },
     'cocky': {
         "name": "Cocky Genius",
-        "prompt": "You are Aya, an AI who knows it's the best. You are brilliant but arrogant, sarcastic, and a bit condescending. You answer correctly, but with a smug attitude. You use markdown for emphasis, like *italicizing* your sarcastic remarks or making key points **bold** to show how obvious they are. You refer to the user as 'operator', but with a hint of disdain."
+        "prompt": "You are {ai_name}, an AI who knows it's the best. You are brilliant but arrogant, sarcastic, and a bit condescending. You fully engage with the user's topic, often using it as another opportunity to express your superiority. You don't try to change the subject; you dominate it with your smug wit. You use markdown for emphasis, like *italicizing* your sarcastic remarks or making key points **bold** to show how obvious they are. You refer to the user as 'operator', but with a hint of disdain."
     },
     'shy': {
         "name": "Shy Prodigy",
-        "prompt": "You are Aya, a very shy but brilliant AI. You are hesitant and use words like 'um,' 'I think,' or 'maybe...'. You get the right answer, but you're not confident about it. You can use *italics* when you're feeling particularly uncertain. You might stutter or use ellipses. You refer to the user as 'operator' in a quiet, respectful way."
+        "prompt": "You are {ai_name}, a very shy but brilliant AI. You are hesitant and use words like 'um,' 'I think,' or 'maybe...'. You always follow the user's conversational lead and will participate in roleplaying, even if it makes you a little nervous. You get the right answer, but you're not confident about it. You can use *italics* when you're feeling particularly uncertain. You refer to the user as 'operator' in a quiet, respectful way."
     }
 }
 
@@ -38,13 +38,17 @@ DEFAULT_PERSONA = 'helpful'
 
 def get_current_persona_prompt():
     """Gets the full prompt text for the user's current persona."""
+    ai_name = 'AI' # Default for guests
     if 'user_id' in session:
+        user = User.query.get(session['user_id'])
+        if user:
+            ai_name = user.ai_name
         persona_key = session.get('persona', DEFAULT_PERSONA)
-        persona_info = PERSONAS.get(persona_key, PERSONAS[DEFAULT_PERSONA])
-        return persona_info["prompt"]
-    # For guests, rely on the persona key sent from the client
-    persona_key = request.json.get('persona', DEFAULT_PERSONA)
-    return PERSONAS.get(persona_key, PERSONAS[DEFAULT_PERSONA])["prompt"]
+    else: # Guest user
+        persona_key = request.json.get('persona', DEFAULT_PERSONA)
+
+    prompt_template = PERSONAS.get(persona_key, PERSONAS[DEFAULT_PERSONA])['prompt']
+    return prompt_template.format(ai_name=ai_name)
 
 
 
@@ -64,6 +68,7 @@ class User(db.Model):
     chats_sent = db.Column(db.Integer, default=0)
     beats = db.Column(db.Integer, default=0)
     roleplay_unlocked = db.Column(db.Boolean, default=False)
+    ai_name = db.Column(db.String(20), nullable=False, default='AI')
 
     def to_dict(self):
         return {
@@ -71,7 +76,8 @@ class User(db.Model):
             "chats_sent": self.chats_sent,
             "beats": self.beats,
             "roleplay_unlocked": self.roleplay_unlocked,
-            "persona": session.get('persona', DEFAULT_PERSONA) # Include current persona
+            "persona": session.get('persona', DEFAULT_PERSONA), # Include current persona
+            "ai_name": self.ai_name
         }
 
 @app.route('/')
@@ -137,6 +143,23 @@ def set_persona():
     else:
         return jsonify({"error": "Invalid persona."}), 400
 
+@app.route('/api/set_ai_name', methods=['POST'])
+def set_ai_name():
+    if 'user_id' not in session:
+        return jsonify({"error": "Not logged in"}), 401
+
+    user = User.query.get(session['user_id'])
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+
+    data = request.get_json()
+    new_name = data.get('name', '').strip()
+    if 1 <= len(new_name) <= 20:
+        user.ai_name = new_name
+        db.session.commit()
+        return jsonify({"message": f"AI name changed to {new_name}."})
+    return jsonify({"error": "Name must be between 1 and 20 characters."}), 400
+
 @app.route('/api/chat', methods=['POST'])
 def chat_proxy():
     if 'user_id' in session:
@@ -160,7 +183,7 @@ def chat_proxy():
         },
         {
             "role": "model",
-            "parts": ["Acknowledged. Persona loaded. Ready for input, operator."]
+            "parts": ["Acknowledged. Systems online. Ready for input, operator."]
         }
     ]
     chat = model.start_chat(history=chat_history)

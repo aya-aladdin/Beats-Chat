@@ -7,7 +7,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- State Management ---
     let state = {
-        appState: 'login', // login, menu, chat, profile, beats, persona
+        appState: 'login', // login, menu, chat, profile, beats, persona, settings
         subState: 'prompt', // For multi-step inputs like username/password
         tempData: {}, // To hold username during login flow
         isExecuting: false,
@@ -64,6 +64,7 @@ document.addEventListener('DOMContentLoaded', () => {
             case 'beats': await handleBeats(commandToProcess); break;
             case 'persona': await handlePersona(commandToProcess); break;
             case 'settings': await handleSettings(commandToProcess); break; // New handler
+            case 'set_ai_name': await handleSetAiName(commandToProcess); break;
         }
         state.isExecuting = false;
         if (state.appState !== 'login' || state.subState === 'prompt') {
@@ -90,7 +91,7 @@ document.addEventListener('DOMContentLoaded', () => {
         switch (state.subState) {
             case 'prompt':
                 if (choice === '1') { // Guest
-                    state.currentUser = { username: 'Guest', chats_sent: 0, beats: 0, roleplay_unlocked: false, persona: 'helpful' };
+                    state.currentUser = { username: 'Guest', chats_sent: 0, beats: 0, roleplay_unlocked: false, persona: 'helpful', ai_name: 'AI' };
                     localStorage.setItem('currentUser', JSON.stringify(state.currentUser)); // Save guest session
                     await type("\nAccess Granted. Welcome, Guest.");
                     await type("Loading main interface...");
@@ -274,6 +275,7 @@ document.addEventListener('DOMContentLoaded', () => {
     async function showSettingsMenu() {
         await type("=== SETTINGS ===");
         await type("[1] Persona Settings");
+        await type(`[2] Change AI Name (Current: ${state.currentUser?.ai_name || 'AI'})`);
         await type("[2] Accessibility");
         await type("\nType 'exit' to return to the main menu.");
     }
@@ -283,7 +285,7 @@ document.addEventListener('DOMContentLoaded', () => {
             case '1':
                 state.appState = 'persona';
                 clearScreen();
-                await type("=== PERSONA SETTINGS ===");
+                await type(`=== PERSONA SETTINGS ===`);
                 await type("Select a persona for Aya:");
                 // --- CHANGE 2: Indicate Selected Persona ---
                 const currentPersona = state.currentUser?.persona;
@@ -293,6 +295,14 @@ document.addEventListener('DOMContentLoaded', () => {
                 await type("\nType a number to select or 'exit' to return.");
                 break;
             case '2':
+                if (state.currentUser.username === 'Guest') {
+                    await type("Guests cannot change the AI's name. Please register an account.");
+                    return;
+                }
+                state.appState = 'set_ai_name';
+                await type("Enter a new name for the AI (1-20 characters):");
+                break;
+            case '3':
                 await type("\nAccessibility options are not yet implemented.");
                 break;
             case 'exit':
@@ -301,6 +311,28 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
+    async function handleSetAiName(command) {
+        const newName = command.trim();
+        if (newName.toLowerCase() === 'exit') {
+            await showSettingsMenu();
+            state.appState = 'settings';
+            return;
+        }
+
+        const response = await fetch('/api/set_ai_name', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name: newName })
+        });
+        const data = await response.json();
+        await type(data.message || `Error: ${data.error}`);
+        if (response.ok) {
+            await updateUserStats(); // Refresh user data to get the new name
+            await new Promise(r => setTimeout(r, 1000));
+            await showSettingsMenu();
+            state.appState = 'settings';
+        }
+    }
     async function handlePersona(command) {
         const choice = command.trim();
         let personaKey = null;
@@ -507,7 +539,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const boot = async () => {
         state.isExecuting = true;
         inputWrapper.style.display = 'none';
-        await type("Booting Aya's AI Terminal...", 30);
+        await type("Booting AI Terminal...", 30);
         await new Promise(r => setTimeout(r, 500));
 
         // Check for a saved session in localStorage

@@ -31,3 +31,7 @@ body {
 body { color: #E0E0E0; }
 #terminal .text-cyan-400 { color: #E0E0E0; } /* Prompt symbol */
 #cursor { background-color: #E0E0E0; }
+
+/* Ensure bold and italic tags render correctly with the custom font */
+b, strong { font-weight: 700; }
+i, em { font-style: italic; }
