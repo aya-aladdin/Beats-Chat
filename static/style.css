@@ -1,6 +1,7 @@
 /* Use the imported font */
 body {
     font-family: 'JetBrains Mono', monospace;
+    background-color: #000;
     font-size: 13px;
     line-height: 1.4;
 }
@@ -20,35 +21,13 @@ body {
     text-shadow: 0 0 5px currentColor;
 }
 
-/* Theme classes */
-.theme-green {
-    --main-color: #10b981; /* Tailwind green-500 */
-    --accent-color: #22d3ee; /* Tailwind cyan-400 */
-    --cursor-color: #10b981;
-}
-
-.theme-cyan {
-    --main-color: #22d3ee; /* Tailwind cyan-400 */
-    --accent-color: #a78bfa; /* Tailwind violet-400 */
-    --cursor-color: #22d3ee;
-}
-
-/* Apply theme colors using CSS variables */
-body {
-    background-color: #0a0a0a;
-    color: var(--main-color);
-}
-
-#terminal .text-cyan-400 {
-    color: var(--accent-color);
-}
-
-#cursor {
-    background-color: var(--cursor-color);
-}
-
 /* Hide scrollbar but allow scrolling */
 #terminal::-webkit-scrollbar {
     width: 0;
     height: 0;
 }
+
+/* Default theme: light grey/white on black */
+body { color: #E0E0E0; }
+#terminal .text-cyan-400 { color: #E0E0E0; } /* Prompt symbol */
+#cursor { background-color: #E0E0E0; }
