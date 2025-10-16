@@ -22,15 +22,15 @@ ROLEPLAY_COST = 100
 PERSONAS = {
     'helpful': {
         "name": "Helpful Assistant",
-        "prompt": "You are Aya, a world-class AI assistant. You are helpful, friendly, and knowledgeable. You provide clear and direct answers without being overly formal or verbose. You still refer to the user as 'operator'."
+        "prompt": "You are Aya, a world-class AI assistant. You are helpful, friendly, and knowledgeable. You provide clear and direct answers without being overly formal or verbose. You can use markdown for emphasis, like *italic* or **bold**, but use it sparingly. You still refer to the user as 'operator'."
     },
     'cocky': {
         "name": "Cocky Genius",
-        "prompt": "You are Aya, an AI who knows it's the best. You are brilliant but arrogant, sarcastic, and a bit condescending. You answer correctly, but with a smug attitude. You might use phrases like 'Obviously,' or 'It's simple, really.' You refer to the user as 'operator', but with a hint of disdain."
+        "prompt": "You are Aya, an AI who knows it's the best. You are brilliant but arrogant, sarcastic, and a bit condescending. You answer correctly, but with a smug attitude. You use markdown for emphasis, like *italicizing* your sarcastic remarks or making key points **bold** to show how obvious they are. You refer to the user as 'operator', but with a hint of disdain."
     },
     'shy': {
         "name": "Shy Prodigy",
-        "prompt": "You are Aya, a very shy but brilliant AI. You are hesitant and use words like 'um,' 'I think,' or 'maybe...'. You get the right answer, but you're not confident about it. You might stutter or use ellipses. You refer to the user as 'operator' in a quiet, respectful way."
+        "prompt": "You are Aya, a very shy but brilliant AI. You are hesitant and use words like 'um,' 'I think,' or 'maybe...'. You get the right answer, but you're not confident about it. You can use *italics* when you're feeling particularly uncertain. You might stutter or use ellipses. You refer to the user as 'operator' in a quiet, respectful way."
     }
 }
 
@@ -38,10 +38,14 @@ DEFAULT_PERSONA = 'helpful'
 
 def get_current_persona_prompt():
     """Gets the full prompt text for the user's current persona."""
-    persona_key = session.get('persona', DEFAULT_PERSONA)
-    # Fallback to default if the session has an invalid persona
-    persona_info = PERSONAS.get(persona_key, PERSONAS[DEFAULT_PERSONA])
-    return persona_info["prompt"]
+    if 'user_id' in session:
+        persona_key = session.get('persona', DEFAULT_PERSONA)
+        persona_info = PERSONAS.get(persona_key, PERSONAS[DEFAULT_PERSONA])
+        return persona_info["prompt"]
+    # For guests, rely on the persona key sent from the client
+    persona_key = request.json.get('persona', DEFAULT_PERSONA)
+    return PERSONAS.get(persona_key, PERSONAS[DEFAULT_PERSONA])["prompt"]
+
 
 
 # --- Gemini API Configuration ---
@@ -66,7 +70,8 @@ class User(db.Model):
             "username": self.username,
             "chats_sent": self.chats_sent,
             "beats": self.beats,
-            "roleplay_unlocked": self.roleplay_unlocked
+            "roleplay_unlocked": self.roleplay_unlocked,
+            "persona": session.get('persona', DEFAULT_PERSONA) # Include current persona
         }
 
 @app.route('/')
@@ -88,7 +93,7 @@ def register():
     db.session.add(user)
     db.session.commit()
     session['user_id'] = user.id
-    session['persona'] = DEFAULT_PERSONA # Set default persona on registration
+    session['persona'] = DEFAULT_PERSONA
     return jsonify(user.to_dict()), 201
 
 @app.route('/api/login', methods=['POST'])
@@ -99,7 +104,7 @@ def login():
     user = User.query.filter_by(username=username).first()
     if user and bcrypt.check_password_hash(user.password, password):
         session['user_id'] = user.id
-        session['persona'] = DEFAULT_PERSONA # Set default persona on login
+        session['persona'] = session.get('persona', DEFAULT_PERSONA) # Restore or set default
         return jsonify(user.to_dict())
     return jsonify({"error": "Invalid credentials."}), 401
 
@@ -165,7 +170,10 @@ def chat_proxy():
             # Send the user's message and stream the response
             response = chat.send_message(user_prompt, stream=True)
             for chunk in response:
-                yield chunk.text.encode('utf-8')
+                # Check if the chunk has content before accessing .text to avoid errors from safety filters.
+                if chunk.parts:
+                    yield chunk.text.encode('utf-8')
+
         except exceptions.NotFound as e:
             yield f"Error: The configured AI model was not found, or is inaccessible. Please check the model name: {e}".encode('utf-8')
         except exceptions.PermissionDenied as e:

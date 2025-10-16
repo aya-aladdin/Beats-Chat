@@ -41,26 +41,30 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const processCommand = async (command) => {
         state.isExecuting = true;
-        const displayCommand = (state.appState === 'login' && (state.subState === 'password' || state.subState === 'register_password')) ? command.replace(/./g, '*') : command;
-        addToOutput(`${PROMPT} ${displayCommand}`);
+        // --- CHANGE 1: Immediate Input Clearing ---
+        // Capture the command and clear the input line visually and from state *before* processing.
+        const commandToProcess = command;
+        state.currentInput = "";
+        inputLine.textContent = "";
 
-        if (command.trim() !== '' && state.appState === 'chat') {
-            state.commandHistory.unshift(command);
+        const displayCommand = (state.appState === 'login' && (state.subState === 'password' || state.subState === 'register_password')) ? command.replace(/./g, '*') : command;
+        addToOutput(`${PROMPT} ${displayCommand}`); // Show the processed command in the output
+
+        if (commandToProcess.trim() !== '' && state.appState === 'chat') {
+            state.commandHistory.unshift(commandToProcess);
             state.historyIndex = -1;
         }
         
         // State-based command processing
         switch (state.appState) {
-            case 'login': await handleLogin(command); break;
-            case 'menu': await handleMenu(command); break;
-            case 'chat': await handleChat(command); break;
-            case 'profile': await handleProfile(command); break;
-            case 'beats': await handleBeats(command); break;
-            case 'persona': await handlePersona(command); break;
+            case 'login': await handleLogin(commandToProcess); break;
+            case 'menu': await handleMenu(commandToProcess); break;
+            case 'chat': await handleChat(commandToProcess); break;
+            case 'profile': await handleProfile(commandToProcess); break;
+            case 'beats': await handleBeats(commandToProcess); break;
+            case 'persona': await handlePersona(commandToProcess); break;
+            case 'settings': await handleSettings(commandToProcess); break; // New handler
         }
-
-        state.currentInput = "";
-        inputLine.textContent = "";
         state.isExecuting = false;
         if (state.appState !== 'login' || state.subState === 'prompt') {
              inputWrapper.style.display = 'flex';
@@ -86,7 +90,7 @@ document.addEventListener('DOMContentLoaded', () => {
         switch (state.subState) {
             case 'prompt':
                 if (choice === '1') { // Guest
-                    state.currentUser = { username: 'Guest', chats_sent: 0, beats: 0, roleplay_unlocked: false };
+                    state.currentUser = { username: 'Guest', chats_sent: 0, beats: 0, roleplay_unlocked: false, persona: 'helpful' };
                     localStorage.setItem('currentUser', JSON.stringify(state.currentUser)); // Save guest session
                     await type("\nAccess Granted. Welcome, Guest.");
                     await type("Loading main interface...");
@@ -165,7 +169,7 @@ document.addEventListener('DOMContentLoaded', () => {
         await type("[1] Talk to AI");
         await type(`[2] Roleplay Mode (${roleplayStatus})`);
         await type("[3] Beats & Upgrades");
-        await type("[4] Persona Settings");
+        await type("[4] Settings"); // Renamed from "Persona Settings"
         await type("[5] Profile Stats");
         await type("[6] Exit");
     }
@@ -196,14 +200,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 await type("\nType a number to purchase or 'exit' to return.");
                 break;
             case '4':
-                state.appState = 'persona';
+                state.appState = 'settings';
                 clearScreen();
-                await type("=== PERSONA SETTINGS ===");
-                await type("Select a persona for Aya:");
-                await type("[1] Helpful Assistant (Default)");
-                await type("[2] Cocky Genius");
-                await type("[3] Shy Prodigy");
-                await type("\nType a number to select or 'exit' to return.");
+                await showSettingsMenu();
                 break;
             case '5':
                 state.appState = 'profile';
@@ -272,6 +271,36 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
+    async function showSettingsMenu() {
+        await type("=== SETTINGS ===");
+        await type("[1] Persona Settings");
+        await type("[2] Accessibility");
+        await type("\nType 'exit' to return to the main menu.");
+    }
+
+    async function handleSettings(command) {
+        switch(command.trim().toLowerCase()) {
+            case '1':
+                state.appState = 'persona';
+                clearScreen();
+                await type("=== PERSONA SETTINGS ===");
+                await type("Select a persona for Aya:");
+                // --- CHANGE 2: Indicate Selected Persona ---
+                const currentPersona = state.currentUser?.persona;
+                await type(`[1] Helpful Assistant ${currentPersona === 'helpful' ? '(Selected)' : ''}`);
+                await type(`[2] Cocky Genius ${currentPersona === 'cocky' ? '(Selected)' : ''}`);
+                await type(`[3] Shy Prodigy ${currentPersona === 'shy' ? '(Selected)' : ''}`);
+                await type("\nType a number to select or 'exit' to return.");
+                break;
+            case '2':
+                await type("\nAccessibility options are not yet implemented.");
+                break;
+            case 'exit':
+                await showMainMenu();
+                break;
+        }
+    }
+
     async function handlePersona(command) {
         const choice = command.trim();
         let personaKey = null;
@@ -288,6 +317,24 @@ document.addEventListener('DOMContentLoaded', () => {
                 return;
         }
 
+        // For guests, handle persona change on the client-side only
+        if (state.currentUser.username === 'Guest') {
+            state.currentUser.persona = personaKey;
+            localStorage.setItem('currentUser', JSON.stringify(state.currentUser));
+            await type(`Persona switched to ${personaKey}.`);
+            return;
+        }
+
+        // For registered users, first verify the session is still active on the server.
+        // If not, treat them like a guest for this action to prevent errors.
+        const sessionCheckResponse = await fetch('/api/user_data');
+        if (!sessionCheckResponse.ok) {
+            state.currentUser.persona = personaKey;
+            localStorage.setItem('currentUser', JSON.stringify(state.currentUser));
+            await type(`Persona switched to ${personaKey}. (Local session)`);
+            return;
+        }
+
         const response = await fetch('/api/set_persona', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -297,10 +344,22 @@ document.addEventListener('DOMContentLoaded', () => {
         const data = await response.json();
         if (response.ok) {
             await type(data.message);
+            // Update local state to reflect the change immediately
+            if (state.currentUser) {
+                state.currentUser.persona = personaKey;
+            }
         } else {
             await type(`Error: ${data.error}`);
         }
     }
+
+    // --- Utility Functions ---
+
+    const parseMarkdown = (text) => {
+        return text
+            .replace(/\*\*(.*?)\*\*/g, '<b>$1</b>') // Bold
+            .replace(/\*(.*?)\*/g, '<i>$1</i>');   // Italic
+    };
 
     const fetchAIResponse = async (prompt) => {
         const responseElement = createResponseElement();
@@ -311,7 +370,10 @@ document.addEventListener('DOMContentLoaded', () => {
             const response = await fetch('/api/chat', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ prompt }),
+                body: JSON.stringify({
+                    prompt,
+                    persona: state.currentUser?.persona // Send current persona for guest users
+                }),
                 signal: state.abortController.signal,
             });
 
@@ -326,7 +388,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 const { value, done } = await reader.read();
                 if (done) break;
                 const chunk = decoder.decode(value, { stream: true });
-                responseElement.innerHTML += chunk.replace(/\n/g, '<br>');
+                // Parse markdown and newlines before adding to innerHTML
+                responseElement.innerHTML += parseMarkdown(chunk).replace(/\n/g, '<br>');
                 terminal.scrollTop = terminal.scrollHeight;
             }
             await updateUserStats(); // Let the backend be the source of truth
@@ -378,8 +441,6 @@ document.addEventListener('DOMContentLoaded', () => {
             await handleMenu('3'); // Re-show the beats menu
         }
     }
-
-    // --- Utility Functions ---
 
     const addToOutput = (html) => {
         const div = document.createElement('div');
