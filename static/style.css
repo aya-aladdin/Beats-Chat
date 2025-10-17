@@ -59,3 +59,55 @@ body {
 /* Ensure bold and italic tags render correctly with the custom font */
 b, strong { font-weight: 700; }
 i, em { font-style: italic; }
+
+/* --- New Accessibility Menu Styles --- */
+.access-container {
+    margin-top: 0.5rem;
+    margin-bottom: 0.5rem;
+}
+
+.access-option {
+    display: flex;
+    align-items: center;
+    padding: 0.25rem 0.5rem;
+    margin-bottom: 0.5rem;
+    border: 1px solid transparent;
+    border-radius: 4px;
+}
+
+.access-option.selected {
+    border-color: var(--prompt-color);
+    background-color: rgba(255, 255, 255, 0.05);
+}
+
+.access-label {
+    min-width: 180px; /* Adjust as needed */
+    font-weight: bold;
+}
+
+.access-choices {
+    display: flex;
+    gap: 0.5rem;
+}
+
+.choice-box {
+    padding: 0.25rem 0.75rem;
+    border: 1px solid #555;
+    border-radius: 4px;
+    cursor: pointer;
+    text-align: center;
+    min-width: 50px;
+}
+
+.choice-box.active {
+    border-color: var(--text-color);
+    background-color: var(--prompt-color);
+    color: var(--bg-color);
+    font-weight: bold;
+}
+
+.theme-preview { line-height: 1.2; }
+.theme-preview.theme-default { background-color: #000; color: #E0E0E0; border-color: #555; }
+.theme-preview.theme-green { background-color: #000; color: #4ade80; border-color: #4ade80; }
+.theme-preview.theme-amber { background-color: #1c1c1c; color: #f59e0b; border-color: #f59e0b; }
+.theme-preview.theme-solarized-dark { background-color: #002b36; color: #839496; border-color: #268bd2; }

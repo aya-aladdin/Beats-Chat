@@ -18,6 +18,7 @@ document.addEventListener('DOMContentLoaded', () => {
             items: [], // { text, command, isSelected }
             selectedIndex: 0,
             isNavigable: false,
+            focusedChoiceIndex: 0, // For horizontal navigation in new menus
         },
         accessibility: {
             theme: 'default', typingSpeed: 20, cursorBlink: true, menuArrows: true, fontSize: 'normal',
@@ -376,63 +377,66 @@ document.addEventListener('DOMContentLoaded', () => {
         state.appState = 'accessibility';
         state.menu.isNavigable = true;
         state.menu.selectedIndex = 0;
+        state.menu.focusedChoiceIndex = 0;
+        clearScreen();
         await type("=== ACCESSIBILITY ===");
-        await type("Select an option to cycle through choices.");
-        const { theme, typingSpeed, cursorBlink, menuArrows, fontSize } = state.accessibility;
-        const themeName = theme.replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase()); // e.g., 'solarized-dark' -> 'Solarized Dark'
-        const fontSizeName = fontSize.charAt(0).toUpperCase() + fontSize.slice(1);
+        await type("Use ↑/↓ to select a setting, ←/→ to change it. Type 'exit' to return.");
+
+        // Define the structure for the new menu
         state.menu.items = [
-            { text: `[1] Theme (Current: ${themeName})`, command: '1' },
-            { text: `[2] Font Size (Current: ${fontSizeName})`, command: '2' },
-            { text: `[3] Typing Speed (Current: ${typingSpeed === 0 ? 'Instant' : (typingSpeed === 10 ? 'Fast' : 'Normal')})`, command: '3' },
-            { text: `[4] Blinking Cursor (Current: ${cursorBlink ? 'On' : 'Off'})`, command: '4' },
-            { text: `[5] Menu Navigation (Current: ${menuArrows ? 'Arrows & Typing' : 'Typing Only'})`, command: '5' },
-            { text: "\n[exit] Return to settings", command: 'exit' }
+            {
+                id: 'theme', label: '[1] Theme',
+                choices: [
+                    { value: 'default', text: 'Aa', classes: 'theme-preview theme-default' },
+                    { value: 'green', text: 'Aa', classes: 'theme-preview theme-green' },
+                    { value: 'amber', text: 'Aa', classes: 'theme-preview theme-amber' },
+                    { value: 'solarized-dark', text: 'Aa', classes: 'theme-preview theme-solarized-dark' }
+                ]
+            },
+            {
+                id: 'fontSize', label: '[2] Font Size',
+                choices: [
+                    { value: 'small', text: 'Small' },
+                    { value: 'normal', text: 'Normal' },
+                    { value: 'large', text: 'Large' }
+                ]
+            },
+            {
+                id: 'typingSpeed', label: '[3] Typing Speed',
+                choices: [
+                    { value: 20, text: 'Slow' },
+                    { value: 10, text: 'Fast' },
+                    { value: 0, text: 'Instant' }
+                ]
+            },
+            {
+                id: 'cursorBlink', label: '[4] Blinking Cursor',
+                choices: [
+                    { value: true, text: 'On' },
+                    { value: false, text: 'Off' }
+                ]
+            },
+            {
+                id: 'menuArrows', label: '[5] Menu Arrows',
+                choices: [
+                    { value: true, text: 'On' },
+                    { value: false, text: 'Off' }
+                ]
+            }
         ];
-        renderMenu();
+        renderAccessibilityMenu();
     }
 
     async function handleAccessibility(command) {
-        const choice = command.trim();
+        // This function is now primarily for handling 'exit'
+        const choice = command.trim().toLowerCase();
         switch(choice) {
-            case '1': // Theme
-                const themes = ['default', 'green', 'amber', 'solarized-dark'];
-                let currentThemeIndex = themes.indexOf(state.accessibility.theme);
-                let nextThemeIndex = (currentThemeIndex + 1) % themes.length;
-                state.accessibility.theme = themes[nextThemeIndex];
-                applyAccessibilitySettings();
-                break;
-            case '2': // Font Size
-                const sizes = ['normal', 'large', 'small']; // Cycle normal -> large -> small -> normal
-                let currentSizeIndex = sizes.indexOf(state.accessibility.fontSize);
-                let nextSizeIndex = (currentSizeIndex + 1) % sizes.length;
-                state.accessibility.fontSize = sizes[nextSizeIndex];
-                applyAccessibilitySettings();
-                break;
-            case '3': // Typing Speed
-                const speeds = [20, 10, 0]; // Normal, Fast, Instant
-                let currentSpeedIndex = speeds.indexOf(state.accessibility.typingSpeed);
-                let nextSpeedIndex = (currentSpeedIndex + 1) % speeds.length;
-                state.accessibility.typingSpeed = speeds[nextSpeedIndex];
-                break;
-            case '4': // Blinking Cursor
-                state.accessibility.cursorBlink = !state.accessibility.cursorBlink;
-                applyAccessibilitySettings();
-                break;
-            case '5': // Menu Navigation Style
-                state.accessibility.menuArrows = !state.accessibility.menuArrows;
-                // No need to call applyAccessibilitySettings, this is handled by renderMenu
-                break;
             case 'exit':
             case 'back':
                 clearScreen();
                 await showSettingsMenu();
                 return;
         }
-        // Re-render the menu to show the new setting value
-        saveAccessibilitySettings();
-        clearScreen();
-        await showAccessibilityMenu();
     }
 
     async function handleSetAiName(command) {
@@ -650,6 +654,44 @@ document.addEventListener('DOMContentLoaded', () => {
         terminal.scrollTop = terminal.scrollHeight;
     };
 
+    const renderAccessibilityMenu = () => {
+        // Remove the old menu if it exists
+        const oldContainer = output.querySelector('.access-container');
+        if (oldContainer) oldContainer.remove();
+
+        const container = document.createElement('div');
+        container.className = 'access-container';
+
+        state.menu.items.forEach((option, optionIndex) => {
+            const optionDiv = document.createElement('div');
+            optionDiv.className = 'access-option';
+            if (optionIndex === state.menu.selectedIndex) {
+                optionDiv.classList.add('selected');
+            }
+
+            const labelDiv = document.createElement('div');
+            labelDiv.className = 'access-label';
+            labelDiv.textContent = option.label;
+            optionDiv.appendChild(labelDiv);
+
+            const choicesDiv = document.createElement('div');
+            choicesDiv.className = 'access-choices';
+            option.choices.forEach(choice => {
+                const choiceBox = document.createElement('div');
+                choiceBox.className = 'choice-box ' + (choice.classes || '');
+                if (choice.value === state.accessibility[option.id]) {
+                    choiceBox.classList.add('active');
+                }
+                choiceBox.textContent = choice.text;
+                choicesDiv.appendChild(choiceBox);
+            });
+            optionDiv.appendChild(choicesDiv);
+            container.appendChild(optionDiv);
+        });
+        output.appendChild(container);
+        terminal.scrollTop = terminal.scrollHeight;
+    };
+
     function applyAccessibilitySettings() {
         // Theme
         document.body.className = ''; // Clear existing theme classes
@@ -695,6 +737,31 @@ document.addEventListener('DOMContentLoaded', () => {
                 const selectedCommand = state.menu.items[state.menu.selectedIndex]?.command;
                 if (selectedCommand) processCommand(selectedCommand);
             }
+        } else if (state.appState === 'accessibility' && ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
+            e.preventDefault();
+            const currentOption = state.menu.items[state.menu.selectedIndex];
+            if (!currentOption) return;
+
+            if (e.key === 'ArrowUp' && state.menu.selectedIndex > 0) {
+                state.menu.selectedIndex--;
+            } else if (e.key === 'ArrowDown' && state.menu.selectedIndex < state.menu.items.length - 1) {
+                state.menu.selectedIndex++;
+            } else if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+                const choices = currentOption.choices;
+                let currentChoiceIndex = choices.findIndex(c => c.value === state.accessibility[currentOption.id]);
+
+                if (e.key === 'ArrowLeft' && currentChoiceIndex > 0) {
+                    currentChoiceIndex--;
+                } else if (e.key === 'ArrowRight' && currentChoiceIndex < choices.length - 1) {
+                    currentChoiceIndex++;
+                }
+                // Update the state
+                state.accessibility[currentOption.id] = choices[currentChoiceIndex].value;
+                applyAccessibilitySettings();
+                saveAccessibilitySettings();
+            }
+            renderAccessibilityMenu();
+
         } else if (state.menu.isNavigable && state.accessibility.menuArrows && e.key === 'ArrowUp') {
             e.preventDefault();
             if (state.menu.selectedIndex > 0) {
@@ -703,7 +770,10 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         } else if (state.menu.isNavigable && state.accessibility.menuArrows && e.key === 'ArrowDown') {
             e.preventDefault();
-            if (state.menu.selectedIndex < state.menu.items.length - 1) {
+            // Check if there's an exit item which is often separated by a newline
+            const lastSelectableIndex = state.menu.items.findIndex(item => item.text.includes('\n'));
+            const maxIndex = lastSelectableIndex !== -1 ? lastSelectableIndex : state.menu.items.length - 1;
+            if (state.menu.selectedIndex < maxIndex) {
                 state.menu.selectedIndex++;
                 renderMenu();
             }
