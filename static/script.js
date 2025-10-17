@@ -185,7 +185,7 @@ document.addEventListener('DOMContentLoaded', () => {
             { text: "[3] Beats & Upgrades", command: "3" },
             { text: "[4] Settings", command: "4" },
             { text: "[5] Profile Stats", command: "5" },
-            { text: "[7] Exit", command: "7" },
+            { text: "[6] Exit", command: "6" },
         ];
         renderMenu();
     }
@@ -653,7 +653,7 @@ document.addEventListener('DOMContentLoaded', () => {
     function applyAccessibilitySettings() {
         // Theme
         document.body.className = ''; // Clear existing theme classes
-        document.body.classList.add('bg-black', 'text-green-400', 'font-mono', 'text-sm'); // Re-apply base classes from index.html
+        document.body.classList.add('bg-black', 'text-green-400', 'font-mono'); // Re-apply base classes from index.html
         if (state.accessibility.theme !== 'default') {
             document.body.classList.add(`theme-${state.accessibility.theme}`);
         }
