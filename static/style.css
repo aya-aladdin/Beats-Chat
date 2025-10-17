@@ -1,9 +1,23 @@
+/* --- CSS Variables for Theming --- */
+:root {
+    --bg-color: #000;
+    --text-color: #E0E0E0;
+    --prompt-color: #E0E0E0;
+    --cursor-color: #E0E0E0;
+}
+.theme-green { --text-color: #4ade80; --prompt-color: #4ade80; --cursor-color: #4ade80; }
+.theme-amber { --bg-color: #1c1c1c; --text-color: #f59e0b; --prompt-color: #f59e0b; --cursor-color: #f59e0b; }
+.theme-solarized-dark { --bg-color: #002b36; --text-color: #839496; --prompt-color: #268bd2; --cursor-color: #839496; }
+
+
 /* Use the imported font */
 body {
     font-family: 'JetBrains Mono', monospace;
-    background-color: #000;
+    background-color: var(--bg-color);
     font-size: 13px;
     line-height: 1.4;
+    color: var(--text-color);
+    transition: background-color 0.3s, color 0.3s;
 }
 
 /* Blinking cursor animation */
@@ -14,6 +28,11 @@ body {
 
 .animate-blink {
     animation: blink 1s step-end infinite;
+}
+
+.no-blink #cursor {
+    animation: none;
+    opacity: 1;
 }
 
 /* CRT Glow Effect */
@@ -28,9 +47,9 @@ body {
 }
 
 /* Default theme: light grey/white on black */
-body { color: #E0E0E0; }
-#terminal .text-cyan-400 { color: #E0E0E0; } /* Prompt symbol */
-#cursor { background-color: #E0E0E0; }
+/* body { color: #E0E0E0; } */
+#terminal .text-cyan-400 { color: var(--prompt-color); } /* Prompt symbol */
+#cursor { background-color: var(--cursor-color); }
 
 /* Ensure bold and italic tags render correctly with the custom font */
 b, strong { font-weight: 700; }

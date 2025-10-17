@@ -7,13 +7,21 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- State Management ---
     let state = {
-        appState: 'login', // login, menu, chat, profile, beats, persona, settings
+        appState: 'login', // login, menu, chat, profile, beats, persona, settings, accessibility, set_ai_name
         subState: 'prompt', // For multi-step inputs like username/password
         tempData: {}, // To hold username during login flow
         isExecuting: false,
         currentUser: null, // { username, chats_sent, beats, roleplay_unlocked }
         commandHistory: [],
         historyIndex: -1,
+        menu: {
+            items: [], // { text, command, isSelected }
+            selectedIndex: 0,
+            isNavigable: false,
+        },
+        accessibility: {
+            theme: 'default', typingSpeed: 20, cursorBlink: true,
+        },
         currentInput: "",
         abortController: new AbortController(),
     };
@@ -27,12 +35,12 @@ document.addEventListener('DOMContentLoaded', () => {
         if (window.getSelection().toString().length === 0) focusInput();
     });
 
-    const type = async (text, delay = 20) => {
+    const type = async (text, delay = state.accessibility.typingSpeed) => {
         const element = createResponseElement();
         for (let i = 0; i < text.length; i++) {
             // This check is for masking the "Enter password:" prompt itself if we wanted to, but it's not what we need for live input masking.
             const char = (state.appState === 'login' && (state.subState === 'password' || state.subState === 'register_password')) ? '*' : text.charAt(i);
-            element.innerHTML += char;
+            element.innerHTML += parseMarkdown(char);
             terminal.scrollTop = terminal.scrollHeight;
             await new Promise(resolve => setTimeout(resolve, Math.random() * delay));
         }
@@ -64,6 +72,7 @@ document.addEventListener('DOMContentLoaded', () => {
             case 'beats': await handleBeats(commandToProcess); break;
             case 'persona': await handlePersona(commandToProcess); break;
             case 'settings': await handleSettings(commandToProcess); break; // New handler
+            case 'accessibility': await handleAccessibility(commandToProcess); break;
             case 'set_ai_name': await handleSetAiName(commandToProcess); break;
         }
         state.isExecuting = false;
@@ -78,6 +87,7 @@ document.addEventListener('DOMContentLoaded', () => {
         state.appState = 'login';
         state.subState = 'prompt';
         state.currentUser = null;
+        state.menu.isNavigable = false;
         clearScreen();
         await type("Welcome back, operator.");
         await type("Login as:");
@@ -164,15 +174,20 @@ document.addEventListener('DOMContentLoaded', () => {
     async function showMainMenu() {
         state.appState = 'menu';
         state.subState = 'prompt';
+        state.menu.isNavigable = true;
+        state.menu.selectedIndex = 0;
         clearScreen();
         const roleplayStatus = state.currentUser?.roleplay_unlocked ? "UNLOCKED ✅" : "LOCKED 🔒";
         await type("=== MAIN MENU ===");
-        await type("[1] Talk to AI");
-        await type(`[2] Roleplay Mode (${roleplayStatus})`);
-        await type("[3] Beats & Upgrades");
-        await type("[4] Settings"); // Renamed from "Persona Settings"
-        await type("[5] Profile Stats");
-        await type("[6] Exit");
+        state.menu.items = [
+            { text: "[1] Talk to AI", command: "1" },
+            { text: `[2] Roleplay Mode (${roleplayStatus})`, command: "2" },
+            { text: "[3] Beats & Upgrades", command: "3" },
+            { text: "[4] Settings", command: "4" },
+            { text: "[5] Profile Stats", command: "5" },
+            { text: "[6] Exit", command: "6" },
+        ];
+        renderMenu();
     }
 
     async function handleMenu(command) {
@@ -180,6 +195,7 @@ document.addEventListener('DOMContentLoaded', () => {
         switch(command.trim().toLowerCase()) {
             case '1':
                 state.appState = 'chat';
+                state.menu.isNavigable = false;
                 clearScreen();
                 await type("AI Chat Interface. Type 'exit' to return to menu.");
                 break;
@@ -188,20 +204,22 @@ document.addEventListener('DOMContentLoaded', () => {
                 break;
             case '3':
                 state.appState = 'beats';
+                state.menu.isNavigable = true;
+                state.menu.selectedIndex = 0;
                 clearScreen();
                 const roleplayCost = 100;
                 await type("=== Beats & Upgrades ===");
                 await type(`Current Beats: ${state.currentUser?.beats || 0}`);
                 await type("\nAvailable Upgrades:");
-                if (state.currentUser?.roleplay_unlocked) {
-                    await type("[1] Roleplay Mode (Already Unlocked)");
-                } else {
-                    await type(`[1] Unlock Roleplay Mode (Cost: ${roleplayCost} Beats)`);
-                }
-                await type("\nType a number to purchase or 'exit' to return.");
+                state.menu.items = [
+                    { text: state.currentUser?.roleplay_unlocked ? "[1] Roleplay Mode (Already Unlocked)" : `[1] Unlock Roleplay Mode (Cost: ${roleplayCost} Beats)`, command: "1" },
+                    { text: "\n[exit] Return to menu", command: "exit" }
+                ];
+                renderMenu();
                 break;
             case '4':
                 state.appState = 'settings';
+                state.menu.isNavigable = true;
                 clearScreen();
                 await showSettingsMenu();
                 break;
@@ -211,6 +229,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (state.currentUser.username !== 'Guest') {
                     await updateUserStats();
                 }
+                state.menu.isNavigable = false;
                 clearScreen();
                 await type("=== PROFILE STATS ===");
                 await type(`USER: ${state.currentUser?.username || 'Guest'}`);
@@ -236,6 +255,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     async function handleChat(command) {
         if (command.toLowerCase() === 'exit') {
+            state.menu.isNavigable = true;
             await showMainMenu();
             return;
         }
@@ -253,7 +273,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     async function handleBeats(command) {
         const choice = command.trim();
-        if (choice.toLowerCase() === 'exit') {
+        if (choice.toLowerCase() === 'exit' || choice.toLowerCase() === 'back') {
             await showMainMenu();
             return;
         }
@@ -273,26 +293,36 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     async function showSettingsMenu() {
+        state.appState = 'settings';
+        state.menu.isNavigable = true;
+        state.menu.selectedIndex = 0;
         await type("=== SETTINGS ===");
-        await type("[1] Persona Settings");
-        await type(`[2] Change AI Name (Current: ${state.currentUser?.ai_name || 'AI'})`);
-        await type("[3] Accessibility");
-        await type("\nType 'exit' to return to the main menu.");
+        state.menu.items = [
+            { text: "[1] Persona Settings", command: "1" },
+            { text: `[2] Change AI Name (Current: ${state.currentUser?.ai_name || 'AI'})`, command: "2" },
+            { text: "[3] Accessibility", command: "3" },
+            { text: "\n[exit] Return to main menu", command: "exit" }
+        ];
+        renderMenu();
     }
 
     async function handleSettings(command) {
         switch(command.trim().toLowerCase()) {
             case '1':
                 state.appState = 'persona';
+                state.menu.isNavigable = true;
+                state.menu.selectedIndex = 0;
                 clearScreen();
                 await type(`=== PERSONA SETTINGS ===`);
-                await type("Select a persona for Aya:");
-                // --- CHANGE 2: Indicate Selected Persona ---
+                await type("Select a persona for the AI:");
                 const currentPersona = state.currentUser?.persona;
-                await type(`[1] Helpful Assistant ${currentPersona === 'helpful' ? '(Selected)' : ''}`);
-                await type(`[2] Cocky Genius ${currentPersona === 'cocky' ? '(Selected)' : ''}`);
-                await type(`[3] Shy Prodigy ${currentPersona === 'shy' ? '(Selected)' : ''}`);
-                await type("\nType a number to select or 'exit' to return.");
+                state.menu.items = [
+                    { text: `[1] Helpful Assistant ${currentPersona === 'helpful' ? '(*)' : ''}`, command: '1' },
+                    { text: `[2] Cocky Genius ${currentPersona === 'cocky' ? '(*)' : ''}`, command: '2' },
+                    { text: `[3] Shy Prodigy ${currentPersona === 'shy' ? '(*)' : ''}`, command: '3' },
+                    { text: "\n[exit] Return to settings", command: 'exit' }
+                ];
+                renderMenu();
                 break;
             case '2':
                 if (state.currentUser.username === 'Guest') {
@@ -300,15 +330,65 @@ document.addEventListener('DOMContentLoaded', () => {
                     return;
                 }
                 state.appState = 'set_ai_name';
+                state.menu.isNavigable = false;
                 await type("Enter a new name for the AI (1-20 characters):");
                 break;
             case '3':
-                await type("\nAccessibility options are not yet implemented.");
+                clearScreen();
+                await showAccessibilityMenu();
                 break;
             case 'exit':
+            case 'back':
                 await showMainMenu();
                 break;
         }
+    }
+
+    async function showAccessibilityMenu() {
+        state.appState = 'accessibility';
+        state.menu.isNavigable = true;
+        state.menu.selectedIndex = 0;
+        await type("=== ACCESSIBILITY ===");
+        const { theme, typingSpeed, cursorBlink } = state.accessibility;
+        state.menu.items = [
+            { text: `[1] Theme (Current: ${theme})`, command: '1' },
+            { text: `[2] Typing Speed (Current: ${typingSpeed === 0 ? 'Instant' : typingSpeed})`, command: '2' },
+            { text: `[3] Blinking Cursor (Current: ${cursorBlink ? 'On' : 'Off'})`, command: '3' },
+            { text: "\n[exit] Return to settings", command: 'exit' }
+        ];
+        renderMenu();
+    }
+
+    async function handleAccessibility(command) {
+        const choice = command.trim();
+        switch(choice) {
+            case '1': // Theme
+                const themes = ['default', 'green', 'amber', 'solarized-dark'];
+                let currentThemeIndex = themes.indexOf(state.accessibility.theme);
+                let nextThemeIndex = (currentThemeIndex + 1) % themes.length;
+                state.accessibility.theme = themes[nextThemeIndex];
+                applyAccessibilitySettings();
+                break;
+            case '2': // Typing Speed
+                const speeds = [20, 10, 0]; // Normal, Fast, Instant
+                let currentSpeedIndex = speeds.indexOf(state.accessibility.typingSpeed);
+                let nextSpeedIndex = (currentSpeedIndex + 1) % speeds.length;
+                state.accessibility.typingSpeed = speeds[nextSpeedIndex];
+                break;
+            case '3': // Blinking Cursor
+                state.accessibility.cursorBlink = !state.accessibility.cursorBlink;
+                applyAccessibilitySettings();
+                break;
+            case 'exit':
+            case 'back':
+                clearScreen();
+                await showSettingsMenu();
+                return;
+        }
+        // Re-render the menu to show the new setting value
+        saveAccessibilitySettings();
+        clearScreen();
+        await showAccessibilityMenu();
     }
 
     async function handleSetAiName(command) {
@@ -355,7 +435,8 @@ document.addEventListener('DOMContentLoaded', () => {
             case '2': personaKey = 'cocky'; break;
             case '3': personaKey = 'shy'; break;
             case 'exit':
-                await showMainMenu();
+                clearScreen();
+                await showSettingsMenu();
                 return;
             default:
                 await type("Invalid selection.");
@@ -368,9 +449,7 @@ document.addEventListener('DOMContentLoaded', () => {
             localStorage.setItem('currentUser', JSON.stringify(state.currentUser));
             await type(`Persona switched to ${personaKey}.`);
             await new Promise(r => setTimeout(r, 1000));
-            clearScreen();
-            await showSettingsMenu();
-            state.appState = 'settings';
+            await handleSettings('1'); // Re-show persona menu
         }
 
         // For registered users, first verify the session is still active on the server.
@@ -381,9 +460,7 @@ document.addEventListener('DOMContentLoaded', () => {
             localStorage.setItem('currentUser', JSON.stringify(state.currentUser));
             await type(`Persona switched to ${personaKey}. (Local session)`);
             await new Promise(r => setTimeout(r, 1000));
-            clearScreen();
-            await showSettingsMenu();
-            state.appState = 'settings';
+            await handleSettings('1'); // Re-show persona menu
         }
 
         const response = await fetch('/api/set_persona', {
@@ -400,9 +477,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 state.currentUser.persona = personaKey;
             }
             await new Promise(r => setTimeout(r, 1000));
-            clearScreen();
-            await showSettingsMenu();
-            state.appState = 'settings';
+            await handleSettings('1'); // Re-show persona menu
         } else {
             await type(`Error: ${data.error}`);
         }
@@ -514,6 +589,42 @@ document.addEventListener('DOMContentLoaded', () => {
         output.innerHTML = '';
     };
 
+    const renderMenu = () => {
+        // Clear only the part of the output that contains the old menu
+        const menuItems = output.querySelectorAll('.menu-item');
+        menuItems.forEach(item => item.remove());
+
+        state.menu.items.forEach((item, index) => {
+            const isSelected = index === state.menu.selectedIndex;
+            const selector = isSelected ? `&gt; ` : '  ';
+            const line = `${selector}${item.text}`;
+            const div = document.createElement('div');
+            div.classList.add('menu-item'); // Add class for easy removal
+            div.innerHTML = isSelected ? `<b>${line}</b>` : line;
+            output.appendChild(div);
+        });
+        terminal.scrollTop = terminal.scrollHeight;
+    };
+
+    function applyAccessibilitySettings() {
+        // Theme
+        document.body.className = ''; // Clear existing theme classes
+        if (state.accessibility.theme !== 'default') {
+            document.body.classList.add(`theme-${state.accessibility.theme}`);
+        }
+        // Cursor Blink
+        document.body.classList.toggle('no-blink', !state.accessibility.cursorBlink);
+    }
+
+    function saveAccessibilitySettings() {
+        localStorage.setItem('accessibility', JSON.stringify(state.accessibility));
+    }
+
+    function loadAccessibilitySettings() {
+        const saved = localStorage.getItem('accessibility');
+        if (saved) state.accessibility = JSON.parse(saved);
+        applyAccessibilitySettings();
+    }
     // --- Event Handlers ---
 
     document.addEventListener('keydown', (e) => {
@@ -525,10 +636,29 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         if (e.key === 'Enter') {
-            // Allow empty commands for menu navigation
-            if (state.currentInput.trim() || state.appState !== 'chat') {
+            if (state.menu.isNavigable) {
+                const selectedCommand = state.menu.items[state.menu.selectedIndex]?.command;
+                if (selectedCommand) processCommand(selectedCommand);
+            } else if (state.currentInput.trim() || state.appState !== 'chat') {
                 processCommand(state.currentInput);
             }
+        } else if (state.menu.isNavigable && e.key === 'ArrowUp') {
+            e.preventDefault();
+            if (state.menu.selectedIndex > 0) {
+                state.menu.selectedIndex--;
+                renderMenu();
+            }
+        } else if (state.menu.isNavigable && e.key === 'ArrowDown') {
+            e.preventDefault();
+            if (state.menu.selectedIndex < state.menu.items.length - 1) {
+                state.menu.selectedIndex++;
+                renderMenu();
+            }
+        } else if (state.menu.isNavigable && e.key.length === 1 && !isNaN(parseInt(e.key))) {
+            // Allow number keys to select menu items directly
+            const num = parseInt(e.key);
+            const item = state.menu.items.find(i => i.text.startsWith(`[${num}]`));
+            if (item) processCommand(item.command);
         } else if (e.key === 'Backspace') {
             state.currentInput = state.currentInput.slice(0, -1);
         } else if (e.key === 'ArrowUp' && state.appState === 'chat') {
@@ -562,6 +692,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const boot = async () => {
         state.isExecuting = true;
         inputWrapper.style.display = 'none';
+        loadAccessibilitySettings();
         await type("Booting AI Terminal...", 30);
         await new Promise(r => setTimeout(r, 500));
 
