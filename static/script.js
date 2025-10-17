@@ -20,7 +20,7 @@ document.addEventListener('DOMContentLoaded', () => {
             isNavigable: false,
         },
         accessibility: {
-            theme: 'default', typingSpeed: 20, cursorBlink: true, menuArrows: true,
+            theme: 'default', typingSpeed: 20, cursorBlink: true, menuArrows: true, fontSize: 'normal',
         },
         currentInput: "",
         abortController: new AbortController(),
@@ -185,7 +185,7 @@ document.addEventListener('DOMContentLoaded', () => {
             { text: "[3] Beats & Upgrades", command: "3" },
             { text: "[4] Settings", command: "4" },
             { text: "[5] Profile Stats", command: "5" },
-            { text: "[6] Exit", command: "6" },
+            { text: "[7] Exit", command: "7" },
         ];
         renderMenu();
     }
@@ -239,7 +239,18 @@ document.addEventListener('DOMContentLoaded', () => {
                 await type("\nType 'exit' to return to menu.");
                 break;
             case '6':
-            case 'exit': // Allow user to type 'exit' as well
+                // Cycle through font sizes
+                const sizes = ['normal', 'large', 'small']; // Cycle normal -> large -> small
+                let currentSizeIndex = sizes.indexOf(state.accessibility.fontSize);
+                let nextSizeIndex = (currentSizeIndex + 1) % sizes.length;
+                state.accessibility.fontSize = sizes[nextSizeIndex];
+                applyAccessibilitySettings();
+                saveAccessibilitySettings();
+                const newSizeName = state.accessibility.fontSize.charAt(0).toUpperCase() + state.accessibility.fontSize.slice(1);
+                await type(`Font size set to: ${newSizeName}`);
+                break;
+            case '7':
+            case 'exit':
                 await type("Logging out...");
                 if (state.currentUser.username !== 'Guest') {
                     await fetch('/api/logout', { method: 'POST' });
@@ -367,13 +378,15 @@ document.addEventListener('DOMContentLoaded', () => {
         state.menu.selectedIndex = 0;
         await type("=== ACCESSIBILITY ===");
         await type("Select an option to cycle through choices.");
-        const { theme, typingSpeed, cursorBlink, menuArrows } = state.accessibility;
+        const { theme, typingSpeed, cursorBlink, menuArrows, fontSize } = state.accessibility;
         const themeName = theme.replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase()); // e.g., 'solarized-dark' -> 'Solarized Dark'
+        const fontSizeName = fontSize.charAt(0).toUpperCase() + fontSize.slice(1);
         state.menu.items = [
             { text: `[1] Theme (Current: ${themeName})`, command: '1' },
-            { text: `[2] Typing Speed (Current: ${typingSpeed === 0 ? 'Instant' : (typingSpeed === 10 ? 'Fast' : 'Normal')})`, command: '2' },
-            { text: `[3] Blinking Cursor (Current: ${cursorBlink ? 'On' : 'Off'})`, command: '3' },
-            { text: `[4] Menu Navigation (Current: ${menuArrows ? 'Arrows & Typing' : 'Typing Only'})`, command: '4' },
+            { text: `[2] Font Size (Current: ${fontSizeName})`, command: '2' },
+            { text: `[3] Typing Speed (Current: ${typingSpeed === 0 ? 'Instant' : (typingSpeed === 10 ? 'Fast' : 'Normal')})`, command: '3' },
+            { text: `[4] Blinking Cursor (Current: ${cursorBlink ? 'On' : 'Off'})`, command: '4' },
+            { text: `[5] Menu Navigation (Current: ${menuArrows ? 'Arrows & Typing' : 'Typing Only'})`, command: '5' },
             { text: "\n[exit] Return to settings", command: 'exit' }
         ];
         renderMenu();
@@ -389,17 +402,24 @@ document.addEventListener('DOMContentLoaded', () => {
                 state.accessibility.theme = themes[nextThemeIndex];
                 applyAccessibilitySettings();
                 break;
-            case '2': // Typing Speed
+            case '2': // Font Size
+                const sizes = ['normal', 'large', 'small']; // Cycle normal -> large -> small -> normal
+                let currentSizeIndex = sizes.indexOf(state.accessibility.fontSize);
+                let nextSizeIndex = (currentSizeIndex + 1) % sizes.length;
+                state.accessibility.fontSize = sizes[nextSizeIndex];
+                applyAccessibilitySettings();
+                break;
+            case '3': // Typing Speed
                 const speeds = [20, 10, 0]; // Normal, Fast, Instant
                 let currentSpeedIndex = speeds.indexOf(state.accessibility.typingSpeed);
                 let nextSpeedIndex = (currentSpeedIndex + 1) % speeds.length;
                 state.accessibility.typingSpeed = speeds[nextSpeedIndex];
                 break;
-            case '3': // Blinking Cursor
+            case '4': // Blinking Cursor
                 state.accessibility.cursorBlink = !state.accessibility.cursorBlink;
                 applyAccessibilitySettings();
                 break;
-            case '4': // Menu Navigation Style
+            case '5': // Menu Navigation Style
                 state.accessibility.menuArrows = !state.accessibility.menuArrows;
                 // No need to call applyAccessibilitySettings, this is handled by renderMenu
                 break;
@@ -633,9 +653,13 @@ document.addEventListener('DOMContentLoaded', () => {
     function applyAccessibilitySettings() {
         // Theme
         document.body.className = ''; // Clear existing theme classes
+        document.body.classList.add('bg-black', 'text-green-400', 'font-mono', 'text-sm'); // Re-apply base classes from index.html
         if (state.accessibility.theme !== 'default') {
             document.body.classList.add(`theme-${state.accessibility.theme}`);
         }
+        // Font Size
+        document.body.classList.remove('font-size-small', 'font-size-normal', 'font-size-large');
+        document.body.classList.add(`font-size-${state.accessibility.fontSize}`);
         // Cursor Blink
         document.body.classList.toggle('no-blink', !state.accessibility.cursorBlink);
     }
@@ -647,6 +671,8 @@ document.addEventListener('DOMContentLoaded', () => {
     function loadAccessibilitySettings() {
         const saved = localStorage.getItem('accessibility');
         if (saved) state.accessibility = JSON.parse(saved);
+        // Ensure new settings have default values if not in localStorage
+        state.accessibility.fontSize = state.accessibility.fontSize || 'normal';
         applyAccessibilitySettings();
     }
     // --- Event Handlers ---

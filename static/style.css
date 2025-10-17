@@ -9,6 +9,11 @@
 .theme-amber { --bg-color: #1c1c1c; --text-color: #f59e0b; --prompt-color: #f59e0b; --cursor-color: #f59e0b; }
 .theme-solarized-dark { --bg-color: #002b36; --text-color: #839496; --prompt-color: #268bd2; --cursor-color: #839496; }
 
+/* --- Font Size Classes --- */
+.font-size-small { font-size: 11px; }
+.font-size-normal { font-size: 13px; }
+.font-size-large { font-size: 16px; }
+
 
 /* Use the imported font */
 body {
