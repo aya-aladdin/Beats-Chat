@@ -1,6 +1,7 @@
 document.addEventListener('DOMContentLoaded', () => {
     const output = document.getElementById('output');
-    const inputLine = document.getElementById('input-line');
+    const inputPreCursor = document.getElementById('input-pre-cursor');
+    const inputPostCursor = document.getElementById('input-post-cursor');
     const inputWrapper = document.getElementById('input-wrapper');
     const terminal = document.getElementById('terminal');
     const hiddenInput = document.getElementById('hidden-input');
@@ -24,6 +25,7 @@ document.addEventListener('DOMContentLoaded', () => {
             theme: 'default', typingSpeed: 20, cursorBlink: true, menuArrows: true, fontSize: 'normal',
         },
         currentInput: "",
+        cursorPosition: 0,
         abortController: new AbortController(),
     };
 
@@ -53,8 +55,8 @@ document.addEventListener('DOMContentLoaded', () => {
         // --- CHANGE 1: Immediate Input Clearing ---
         // Capture the command and clear the input line visually and from state *before* processing.
         const commandToProcess = command;
-        state.currentInput = "";
-        inputLine.textContent = "";
+        state.currentInput = '';
+        renderInput();
 
         const displayCommand = (state.appState === 'login' && (state.subState === 'password' || state.subState === 'register_password')) ? command.replace(/./g, '*') : command;
         addToOutput(`${PROMPT} ${displayCommand}`); // Show the processed command in the output
@@ -208,7 +210,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 state.menu.isNavigable = true;
                 state.menu.selectedIndex = 0;
                 clearScreen();
-                const roleplayCost = 100;
+                const roleplayCost = 30;
                 await type("=== Beats & Upgrades ===");
                 await type(`Current Beats: ${state.currentUser?.beats || 0}`);
                 await type("\nAvailable Upgrades:");
@@ -686,6 +688,20 @@ document.addEventListener('DOMContentLoaded', () => {
         terminal.scrollTop = terminal.scrollHeight;
     };
 
+    const renderInput = () => {
+        state.cursorPosition = Math.max(0, Math.min(state.currentInput.length, state.cursorPosition));
+        const pre = state.currentInput.substring(0, state.cursorPosition);
+        const post = state.currentInput.substring(state.cursorPosition);
+
+        if (state.subState === 'password' || state.subState === 'register_password') {
+            inputPreCursor.textContent = pre.replace(/./g, '*');
+            inputPostCursor.textContent = post.replace(/./g, '*');
+        } else {
+            inputPreCursor.textContent = pre;
+            inputPostCursor.textContent = post;
+        }
+    };
+
     function applyAccessibilitySettings() {
         // Theme
         // Be specific about which classes to remove to avoid breaking base styles
@@ -786,8 +802,19 @@ document.addEventListener('DOMContentLoaded', () => {
                 // The processCommand function will handle the state changes.
                 processCommand(item.command);
             }
+        } else if (e.key === 'ArrowLeft') {
+            e.preventDefault();
+            if (state.cursorPosition > 0) state.cursorPosition--;
+        } else if (e.key === 'ArrowRight') {
+            e.preventDefault();
+            if (state.cursorPosition < state.currentInput.length) state.cursorPosition++;
         } else if (e.key === 'Backspace') {
-            state.currentInput = state.currentInput.slice(0, -1);
+            if (state.cursorPosition > 0) {
+                const pre = state.currentInput.substring(0, state.cursorPosition - 1);
+                const post = state.currentInput.substring(state.cursorPosition);
+                state.currentInput = pre + post;
+                state.cursorPosition--;
+            }
         } else if (e.key === 'ArrowUp' && state.appState === 'chat') {
             e.preventDefault();
             if (state.historyIndex < state.commandHistory.length - 1) {
@@ -803,16 +830,16 @@ document.addEventListener('DOMContentLoaded', () => {
                 state.historyIndex = -1;
                 state.currentInput = "";
             }
+            state.cursorPosition = state.currentInput.length;
         } else if (e.key.length === 1 && !e.ctrlKey && !e.metaKey) {
-            state.currentInput += e.key;
+            const pre = state.currentInput.substring(0, state.cursorPosition);
+            const post = state.currentInput.substring(state.cursorPosition);
+            state.currentInput = pre + e.key + post;
+            state.cursorPosition++;
         }
 
-        // Visually update the input line, masking password if necessary
-        if (state.subState === 'password' || state.subState === 'register_password') {
-            inputLine.textContent = state.currentInput.replace(/./g, '*');
-        } else {
-            inputLine.textContent = state.currentInput;
-        }
+        // Visually update the input line
+        renderInput();
     });
 
     // --- Initial Boot Sequence ---
