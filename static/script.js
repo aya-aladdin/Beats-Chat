@@ -20,7 +20,7 @@ document.addEventListener('DOMContentLoaded', () => {
             isNavigable: false,
         },
         accessibility: {
-            theme: 'default', typingSpeed: 20, cursorBlink: true,
+            theme: 'default', typingSpeed: 20, cursorBlink: true, menuArrows: true,
         },
         currentInput: "",
         abortController: new AbortController(),
@@ -349,11 +349,14 @@ document.addEventListener('DOMContentLoaded', () => {
         state.menu.isNavigable = true;
         state.menu.selectedIndex = 0;
         await type("=== ACCESSIBILITY ===");
-        const { theme, typingSpeed, cursorBlink } = state.accessibility;
+        await type("Select an option to cycle through choices.");
+        const { theme, typingSpeed, cursorBlink, menuArrows } = state.accessibility;
+        const themeName = theme.replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase()); // e.g., 'solarized-dark' -> 'Solarized Dark'
         state.menu.items = [
-            { text: `[1] Theme (Current: ${theme})`, command: '1' },
-            { text: `[2] Typing Speed (Current: ${typingSpeed === 0 ? 'Instant' : typingSpeed})`, command: '2' },
+            { text: `[1] Theme (Current: ${themeName})`, command: '1' },
+            { text: `[2] Typing Speed (Current: ${typingSpeed === 0 ? 'Instant' : (typingSpeed === 10 ? 'Fast' : 'Normal')})`, command: '2' },
             { text: `[3] Blinking Cursor (Current: ${cursorBlink ? 'On' : 'Off'})`, command: '3' },
+            { text: `[4] Menu Navigation (Current: ${menuArrows ? 'Arrows & Typing' : 'Typing Only'})`, command: '4' },
             { text: "\n[exit] Return to settings", command: 'exit' }
         ];
         renderMenu();
@@ -378,6 +381,10 @@ document.addEventListener('DOMContentLoaded', () => {
             case '3': // Blinking Cursor
                 state.accessibility.cursorBlink = !state.accessibility.cursorBlink;
                 applyAccessibilitySettings();
+                break;
+            case '4': // Menu Navigation Style
+                state.accessibility.menuArrows = !state.accessibility.menuArrows;
+                // No need to call applyAccessibilitySettings, this is handled by renderMenu
                 break;
             case 'exit':
             case 'back':
@@ -596,7 +603,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         state.menu.items.forEach((item, index) => {
             const isSelected = index === state.menu.selectedIndex;
-            const selector = isSelected ? `&gt; ` : '  ';
+            const selector = (isSelected && state.accessibility.menuArrows) ? `&gt; ` : '  ';
             const line = `${selector}${item.text}`;
             const div = document.createElement('div');
             div.classList.add('menu-item'); // Add class for easy removal
@@ -636,19 +643,22 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         if (e.key === 'Enter') {
-            if (state.menu.isNavigable) {
+            // Prioritize typed input. If the user typed something, use that.
+            if (state.currentInput.trim() !== '') {
+                processCommand(state.currentInput);
+            } 
+            // Otherwise, if in a navigable menu, use the selected item.
+            else if (state.menu.isNavigable) {
                 const selectedCommand = state.menu.items[state.menu.selectedIndex]?.command;
                 if (selectedCommand) processCommand(selectedCommand);
-            } else if (state.currentInput.trim() || state.appState !== 'chat') {
-                processCommand(state.currentInput);
             }
-        } else if (state.menu.isNavigable && e.key === 'ArrowUp') {
+        } else if (state.menu.isNavigable && state.accessibility.menuArrows && e.key === 'ArrowUp') {
             e.preventDefault();
             if (state.menu.selectedIndex > 0) {
                 state.menu.selectedIndex--;
                 renderMenu();
             }
-        } else if (state.menu.isNavigable && e.key === 'ArrowDown') {
+        } else if (state.menu.isNavigable && state.accessibility.menuArrows && e.key === 'ArrowDown') {
             e.preventDefault();
             if (state.menu.selectedIndex < state.menu.items.length - 1) {
                 state.menu.selectedIndex++;
