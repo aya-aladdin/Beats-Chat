@@ -313,10 +313,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
     async function handleSetAiName(command) {
         const newName = command.trim();
-        if (newName.toLowerCase() === 'exit') {
+        if (newName.toLowerCase() === 'exit' || newName.toLowerCase() === 'back') {
+            clearScreen();
             await showSettingsMenu();
             state.appState = 'settings';
-            return;
+            return; // Exit this handler
         }
 
         // For registered users, first verify the session is still active on the server.
@@ -325,11 +326,10 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!sessionCheckResponse.ok) {
             state.currentUser.ai_name = newName;
             localStorage.setItem('currentUser', JSON.stringify(state.currentUser));
-            await type(`AI name changed to ${newName}. (Local session)`);
-            await new Promise(r => setTimeout(r, 1000));
-            clearScreen();
-            await showSettingsMenu();
-            state.appState = 'settings';
+            await type(`AI name changed to '${newName}'. (Local session)`);
+            await type("Type 'exit' to return to settings.");
+            // Stay in this state, don't automatically go back.
+            return;
         }
 
         const response = await fetch('/api/set_ai_name', {
@@ -338,12 +338,12 @@ document.addEventListener('DOMContentLoaded', () => {
             body: JSON.stringify({ name: newName })
         });
         const data = await response.json();
-        await type(data.message || `Error: ${data.error}`);
         if (response.ok) {
             await updateUserStats(); // Refresh user data to get the new name
-            await new Promise(r => setTimeout(r, 1000));
-            await showSettingsMenu();
-            state.appState = 'settings';
+            await type(data.message);
+            await type("Type 'exit' to return to settings.");
+        } else {
+            await type(`Error: ${data.error}`);
         }
     }
     async function handlePersona(command) {
