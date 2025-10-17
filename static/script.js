@@ -184,7 +184,14 @@ document.addEventListener('DOMContentLoaded', () => {
                 await type("AI Chat Interface. Type 'exit' to return to menu.");
                 break;
             case '2':
-                await type("Roleplay mode is not yet implemented.");
+                if (state.currentUser?.roleplay_unlocked) {
+                    state.appState = 'chat';
+                    clearScreen();
+                    await type("Roleplay Mode Engaged. The AI is now more receptive to narrative scenarios.");
+                    await type("Type 'exit' to return to menu.");
+                } else {
+                    await type("Roleplay Mode is LOCKED. 🔒\nUnlock this feature from the 'Beats & Upgrades' menu.");
+                }
                 break;
             case '3':
                 state.appState = 'beats';
