@@ -18,6 +18,7 @@ bcrypt = Bcrypt(app)
 
 # --- Application Constants ---
 ROLEPLAY_COST = 100
+CHANGE_NAME_COST_CHATS = 20
 
 PERSONAS = {
     'helpful': {
@@ -151,6 +152,9 @@ def set_ai_name():
     user = User.query.get(session['user_id'])
     if not user:
         return jsonify({"error": "User not found"}), 404
+
+    if user.chats_sent < CHANGE_NAME_COST_CHATS:
+        return jsonify({"error": f"Requires {CHANGE_NAME_COST_CHATS} chats sent to unlock."}), 403
 
     data = request.get_json()
     new_name = data.get('name', '').strip()

@@ -297,9 +297,20 @@ document.addEventListener('DOMContentLoaded', () => {
         state.menu.isNavigable = true;
         state.menu.selectedIndex = 0;
         await type("=== SETTINGS ===");
+
+        const CHANGE_NAME_COST_CHATS = 20;
+        const isGuest = state.currentUser?.username === 'Guest';
+        let aiNameText;
+        if (isGuest) {
+            aiNameText = "[2] Change AI Name (LOCKED 🔒)";
+        } else if (state.currentUser.chats_sent < CHANGE_NAME_COST_CHATS) {
+            aiNameText = `[2] Change AI Name (LOCKED - Requires ${CHANGE_NAME_COST_CHATS} chats)`;
+        } else {
+            aiNameText = `[2] Change AI Name (Current: ${state.currentUser?.ai_name || 'AI'})`;
+        }
         state.menu.items = [
             { text: "[1] Persona Settings", command: "1" },
-            { text: `[2] Change AI Name (Current: ${state.currentUser?.ai_name || 'AI'})`, command: "2" },
+            { text: aiNameText, command: "2" },
             { text: "[3] Accessibility", command: "3" },
             { text: "\n[exit] Return to main menu", command: "exit" }
         ];
@@ -327,6 +338,12 @@ document.addEventListener('DOMContentLoaded', () => {
             case '2':
                 if (state.currentUser.username === 'Guest') {
                     await type("Guests cannot change the AI's name. Please register an account.");
+                    return;
+                }
+                const CHANGE_NAME_COST_CHATS = 20;
+                if (state.currentUser.chats_sent < CHANGE_NAME_COST_CHATS) {
+                    const chatsNeeded = CHANGE_NAME_COST_CHATS - state.currentUser.chats_sent;
+                    await type(`This feature is locked. You need ${chatsNeeded} more chat(s) to unlock it.`);
                     return;
                 }
                 state.appState = 'set_ai_name';
