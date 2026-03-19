@@ -16,6 +16,9 @@ app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///site.db'
 db = SQLAlchemy(app)
 bcrypt = Bcrypt(app)
 
+# --- In-Memory Chat Storage ---
+CHAT_SESSIONS = {}
+
 # --- Application Constants ---
 ROLEPLAY_CHATS_REQUIRED = 3
 
@@ -117,7 +120,13 @@ def login():
 
 @app.route('/api/logout', methods=['POST'])
 def logout():
+    # Clear server-side chat memory
+    chat_session_id = session.get('chat_session_id')
+    if chat_session_id and chat_session_id in CHAT_SESSIONS:
+        del CHAT_SESSIONS[chat_session_id]
+    
     session.pop('user_id', None)
+    session.pop('chat_session_id', None)
     return jsonify({"message": "Logged out."})
 
 @app.route('/api/user_data')
@@ -170,33 +179,50 @@ def chat_proxy():
         user.chats_sent += 1
         user.beats += 1
         db.session.commit()
+    
+    # --- Memory Management ---
+    # Ensure the user has a unique session ID for chat memory
+    if 'chat_session_id' not in session:
+        session['chat_session_id'] = os.urandom(16).hex()
+    session_id = session['chat_session_id']
+
+    # Retrieve or initialize history
+    history = CHAT_SESSIONS.get(session_id, [])
+    if not history:
+        # Initialize with the system prompt/persona
+        history = [
+            {"role": "user", "parts": [get_current_persona_prompt()]},
+            {"role": "model", "parts": ["Acknowledged. Systems online. Ready for input, operator."]}
+        ]
+        CHAT_SESSIONS[session_id] = history
 
     user_prompt = request.json.get('prompt')
     # For Gemini, we can prime the model with a user/model exchange to set the persona.
     # Using a model confirmed to be available from the startup log.
     model = genai.GenerativeModel('gemini-2.5-flash')
     
-    # The conversation history sets the AI's persona.
-    chat_history = [
-        {
-            "role": "user",
-            "parts": [get_current_persona_prompt()]
-        },
-        {
-            "role": "model",
-            "parts": ["Acknowledged. Systems online. Ready for input, operator."]
-        }
-    ]
-    chat = model.start_chat(history=chat_history)
+    # Start chat with the retrieved history
+    chat = model.start_chat(history=history)
 
     def generate():
+        full_response_text = ""
         try:
             # Send the user's message and stream the response
             response = chat.send_message(user_prompt, stream=True)
             for chunk in response:
                 # Check if the chunk has content before accessing .text to avoid errors from safety filters.
                 if chunk.parts:
-                    yield chunk.text.encode('utf-8')
+                    text = chunk.text
+                    full_response_text += text
+                    yield text.encode('utf-8')
+            
+            # --- Update Memory ---
+            # Append the completed turn to the session history
+            # We re-fetch from CHAT_SESSIONS to ensure we are appending to the current list
+            current_history = CHAT_SESSIONS.get(session_id, [])
+            current_history.append({"role": "user", "parts": [user_prompt]})
+            current_history.append({"role": "model", "parts": [full_response_text]})
+            CHAT_SESSIONS[session_id] = current_history
 
         except exceptions.NotFound as e:
             yield f"Error: The configured AI model was not found, or is inaccessible. Please check the model name: {e}".encode('utf-8')
