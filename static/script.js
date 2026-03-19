@@ -229,9 +229,8 @@ document.addEventListener('DOMContentLoaded', () => {
             case '6':
             case 'exit': // Allow user to type 'exit' as well
                 await type("Logging out...");
-                if (state.currentUser.username !== 'Guest') {
-                    await fetch('/api/logout', { method: 'POST' });
-                }
+                // Always call logout on the server to clear session/memory
+                await fetch('/api/logout', { method: 'POST' });
                 localStorage.removeItem('currentUser');
                 await new Promise(r => setTimeout(r, 1000));
                 await showLoginScreen();
@@ -243,6 +242,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
     async function handleChat(command) {
         if (command.toLowerCase() === 'exit') {
+            // Clear memory on exit as requested
+            await fetch('/api/reset_chat', { method: 'POST' });
             await showMainMenu();
             return;
         }

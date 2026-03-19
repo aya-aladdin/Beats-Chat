@@ -98,6 +98,12 @@ def register():
     if User.query.filter_by(username=username).first():
         return jsonify({"error": "Username already exists."}), 409
     
+    # Clear any existing chat session (e.g. from Guest mode)
+    chat_session_id = session.get('chat_session_id')
+    if chat_session_id and chat_session_id in CHAT_SESSIONS:
+        del CHAT_SESSIONS[chat_session_id]
+    session.pop('chat_session_id', None)
+    
     hashed_password = bcrypt.generate_password_hash(password).decode('utf-8')
     user = User(username=username, password=hashed_password)
     db.session.add(user)
@@ -113,6 +119,12 @@ def login():
     password = data.get('password')
     user = User.query.filter_by(username=username).first()
     if user and bcrypt.check_password_hash(user.password, password):
+        # Clear any existing chat session to ensure a fresh start
+        chat_session_id = session.get('chat_session_id')
+        if chat_session_id and chat_session_id in CHAT_SESSIONS:
+            del CHAT_SESSIONS[chat_session_id]
+        session.pop('chat_session_id', None)
+
         session['user_id'] = user.id
         session['persona'] = session.get('persona', DEFAULT_PERSONA) # Restore or set default
         return jsonify(user.to_dict())
@@ -128,6 +140,15 @@ def logout():
     session.pop('user_id', None)
     session.pop('chat_session_id', None)
     return jsonify({"message": "Logged out."})
+
+@app.route('/api/reset_chat', methods=['POST'])
+def reset_chat():
+    # Explicitly clear chat memory without logging out
+    chat_session_id = session.get('chat_session_id')
+    if chat_session_id and chat_session_id in CHAT_SESSIONS:
+        del CHAT_SESSIONS[chat_session_id]
+    session.pop('chat_session_id', None)
+    return jsonify({"message": "Chat memory cleared."})
 
 @app.route('/api/user_data')
 def user_data():
