@@ -575,6 +575,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- Utility Functions ---
 
     const parseMarkdown = (text) => {
+        if (!text) return '';
         // 1. Escape HTML to prevent injection and rendering issues
         let html = text
             .replace(/&/g, "&amp;")
@@ -740,6 +741,25 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     // --- Event Handlers ---
+
+    document.addEventListener('paste', (e) => {
+        if (state.isExecuting) return;
+        e.preventDefault();
+
+        const text = (e.clipboardData || window.clipboardData).getData('text');
+        if (text) {
+            // Flatten newlines to spaces for single-line input
+            const cleanText = text.replace(/[\r\n]+/g, ' ');
+            state.currentInput += cleanText;
+
+            // Update visual input line
+            if (state.subState === 'password' || state.subState === 'register_password') {
+                inputLine.textContent = state.currentInput.replace(/./g, '*');
+            } else {
+                inputLine.textContent = state.currentInput;
+            }
+        }
+    });
 
     document.addEventListener('keydown', (e) => {
         if (state.isExecuting) {

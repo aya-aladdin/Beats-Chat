@@ -349,13 +349,16 @@ def start_roleplay():
         # Ask AI to start the scene based on the context
         startup_payload = {
             "model": "qwen/qwen3-32b",
-            "messages": history + [{"role": "user", "content": f"Start the roleplay now based on the scenario: {scenario}"}],
-            "max_tokens": 300
+            "messages": history + [{"role": "user", "content": f"Start the roleplay now based on the scenario: {scenario}. Write exactly 2 short paragraphs to set the scene."}],
+            "max_tokens": 500
         }
         
         response = requests.post(url, headers=headers, json=startup_payload)
         response_json = response.json()
         ai_opener = response_json['choices'][0]['message']['content']
+        
+        if not ai_opener:
+            ai_opener = "Scenario initialized. (No output generated)"
         
         # Save to history so the chat can continue from here
         history.append({"role": "assistant", "content": ai_opener})
