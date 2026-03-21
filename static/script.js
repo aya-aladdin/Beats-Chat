@@ -411,14 +411,34 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- Utility Functions ---
 
     const parseMarkdown = (text) => {
-        return text
-            .replace(/\*\*(.*?)\*\*/g, '<b>$1</b>') // Bold
-            .replace(/\*(.*?)\*/g, '<i>$1</i>');   // Italic
+        // 1. Escape HTML to prevent injection and rendering issues
+        let html = text
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;");
+
+        // 2. Code Blocks (``` ... ```)
+        html = html.replace(/```(\w*)\n?([\s\S]*?)```/g, (match, lang, code) => {
+            return `<pre><code class="language-${lang}">${code}</code></pre>`;
+        });
+
+        // 3. Inline Code (` ... `)
+        html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
+
+        // 4. Formatting (Bold & Italic)
+        html = html.replace(/\*\*(.*?)\*\*/g, '<b>$1</b>');
+        html = html.replace(/\*([^\*]+)\*/g, '<i>$1</i>');
+
+        // 5. Newlines to <br> (excluding pre blocks to preserve code formatting)
+        return html.split(/(<pre[\s\S]*?<\/pre>)/g).map(segment => {
+            return segment.startsWith('<pre') ? segment : segment.replace(/\n/g, '<br>');
+        }).join('');
     };
 
     const fetchAIResponse = async (prompt) => {
         const responseElement = createChatBubble('', 'ai');
         state.abortController = new AbortController();
+        let fullResponse = "";
 
         try {
             const response = await fetch('/api/chat', {
@@ -442,8 +462,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 const { value, done } = await reader.read();
                 if (done) break;
                 const chunk = decoder.decode(value, { stream: true });
-                // Parse markdown and newlines before adding to innerHTML
-                responseElement.innerHTML += parseMarkdown(chunk).replace(/\n/g, '<br>');
+                
+                fullResponse += chunk;
+                responseElement.innerHTML = parseMarkdown(fullResponse);
                 terminal.scrollTop = terminal.scrollHeight;
             }
             await updateUserStats(); // Let the backend be the source of truth
