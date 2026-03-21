@@ -51,6 +51,39 @@ body {
     height: 0;
 }
 
+/* --- Chat UI Improvements --- */
+#output {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+}
+
+.message-bubble {
+    max-width: 80%;
+    padding: 0.75rem 1rem;
+    margin: 0.25rem 0;
+    border-radius: 0.75rem;
+    position: relative;
+    word-wrap: break-word;
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+.message-user {
+    align-self: flex-end;
+    background-color: rgba(255, 255, 255, 0.1);
+    border-bottom-right-radius: 0.1rem;
+    text-align: left;
+}
+
+.message-ai {
+    align-self: flex-start;
+    background-color: rgba(30, 41, 59, 0.6);
+    border-bottom-left-radius: 0.1rem;
+}
+
 /* Default theme: light grey/white on black */
 /* body { color: #E0E0E0; } */
 #terminal .text-cyan-400 { color: var(--prompt-color); } /* Prompt symbol */

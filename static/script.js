@@ -48,7 +48,12 @@ document.addEventListener('DOMContentLoaded', () => {
         inputLine.textContent = "";
 
         const displayCommand = (state.appState === 'login' && (state.subState === 'password' || state.subState === 'register_password')) ? command.replace(/./g, '*') : command;
-        addToOutput(`${PROMPT} ${displayCommand}`); // Show the processed command in the output
+        
+        if (state.appState === 'chat') {
+            createChatBubble(displayCommand, 'user');
+        } else {
+            addToOutput(`${PROMPT} ${displayCommand}`); // Show the processed command in the output
+        }
 
         if (commandToProcess.trim() !== '' && state.appState === 'chat') {
             state.commandHistory.unshift(commandToProcess);
@@ -412,8 +417,7 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     const fetchAIResponse = async (prompt) => {
-        const responseElement = createResponseElement();
-        responseElement.innerHTML = 'AI: ';
+        const responseElement = createChatBubble('', 'ai');
         state.abortController = new AbortController();
 
         try {
@@ -502,6 +506,16 @@ document.addEventListener('DOMContentLoaded', () => {
     const createResponseElement = () => {
         const div = document.createElement('div');
         output.appendChild(div);
+        return div;
+    };
+
+    const createChatBubble = (text, sender) => {
+        const div = document.createElement('div');
+        div.classList.add('message-bubble');
+        div.classList.add(sender === 'user' ? 'message-user' : 'message-ai');
+        div.innerHTML = text; 
+        output.appendChild(div);
+        terminal.scrollTop = terminal.scrollHeight;
         return div;
     };
 

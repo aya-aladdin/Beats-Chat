@@ -1,8 +1,8 @@
 from flask import Flask, render_template, request, Response, jsonify, session
 from flask_sqlalchemy import SQLAlchemy
 from flask_bcrypt import Bcrypt
-import google.generativeai as genai
-from google.api_core import exceptions
+import requests
+import json
 import os
 from dotenv import load_dotenv
 
@@ -53,15 +53,6 @@ def get_current_persona_prompt():
     prompt_template = PERSONAS.get(persona_key, PERSONAS[DEFAULT_PERSONA])['prompt']
     return prompt_template.format(ai_name=ai_name)
 
-
-
-# --- Gemini API Configuration ---
-# Load the API key from an environment variable for security.
-GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
-if not GEMINI_API_KEY:
-    # This provides a clear error if the key is missing when you start the app.
-    raise ValueError("Error: GEMINI_API_KEY environment variable not set.")
-genai.configure(api_key=GEMINI_API_KEY)
 
 # --- Database Models ---
 class User(db.Model):
@@ -211,44 +202,62 @@ def chat_proxy():
     history = CHAT_SESSIONS.get(session_id, [])
     if not history:
         # Initialize with the system prompt/persona
+        # Using OpenAI format: system, user, assistant
         history = [
-            {"role": "user", "parts": [get_current_persona_prompt()]},
-            {"role": "model", "parts": ["Acknowledged. Systems online. Ready for input, operator."]}
+            {"role": "system", "content": get_current_persona_prompt()},
+            {"role": "assistant", "content": "Acknowledged. Systems online. Ready for input, operator."}
         ]
         CHAT_SESSIONS[session_id] = history
 
     user_prompt = request.json.get('prompt')
-    # For Gemini, we can prime the model with a user/model exchange to set the persona.
-    # Using a model confirmed to be available from the startup log.
-    model = genai.GenerativeModel('gemini-2.5-flash')
     
-    # Start chat with the retrieved history
-    chat = model.start_chat(history=history)
+    # Prepare messages for the API call
+    messages = history + [{"role": "user", "content": user_prompt}]
 
     def generate():
         full_response_text = ""
         try:
-            # Send the user's message and stream the response
-            response = chat.send_message(user_prompt, stream=True)
-            for chunk in response:
-                # Check if the chunk has content before accessing .text to avoid errors from safety filters.
-                if chunk.parts:
-                    text = chunk.text
-                    full_response_text += text
-                    yield text.encode('utf-8')
+            url = "https://ai.hackclub.com/proxy/v1/chat/completions"
+            headers = {
+                "Authorization": "Bearer sk-hc-v1-aad18691f5b94ed8ae959cdbaf95600ea2df3328179a449097e83188c5183a91",
+                "Content-Type": "application/json"
+            }
+            payload = {
+                "model": "qwen/qwen3-32b",
+                "messages": messages,
+                "stream": True
+            }
+            
+            with requests.post(url, headers=headers, json=payload, stream=True) as response:
+                if not response.ok:
+                    yield f"Error: API returned {response.status_code} - {response.text}".encode('utf-8')
+                    return
+
+                for line in response.iter_lines():
+                    if line:
+                        decoded_line = line.decode('utf-8')
+                        if decoded_line.startswith('data: '):
+                            content_str = decoded_line[6:]
+                            if content_str.strip() == '[DONE]':
+                                break
+                            try:
+                                json_obj = json.loads(content_str)
+                                delta = json_obj['choices'][0].get('delta', {})
+                                if 'content' in delta:
+                                    text = delta['content']
+                                    full_response_text += text
+                                    yield text.encode('utf-8')
+                            except (json.JSONDecodeError, KeyError):
+                                continue
             
             # --- Update Memory ---
             # Append the completed turn to the session history
             # We re-fetch from CHAT_SESSIONS to ensure we are appending to the current list
             current_history = CHAT_SESSIONS.get(session_id, [])
-            current_history.append({"role": "user", "parts": [user_prompt]})
-            current_history.append({"role": "model", "parts": [full_response_text]})
+            current_history.append({"role": "user", "content": user_prompt})
+            current_history.append({"role": "assistant", "content": full_response_text})
             CHAT_SESSIONS[session_id] = current_history
 
-        except exceptions.NotFound as e:
-            yield f"Error: The configured AI model was not found, or is inaccessible. Please check the model name: {e}".encode('utf-8')
-        except exceptions.PermissionDenied as e:
-            yield f"Error: API key is invalid or has expired. {e}".encode('utf-8')
         except Exception as e:
             yield f"Error: Could not get response from AI: {e}".encode('utf-8')
 
