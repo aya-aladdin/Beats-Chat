@@ -234,14 +234,21 @@ def chat_proxy():
 
     user_prompt = request.json.get('prompt')
     
-    # Prepare messages for the API call
-    messages = history + [{"role": "user", "content": user_prompt}]
-
-    # Determine max_tokens based on user preference
-    # Default to 500 (balanced) if user is guest or preference not set
-    length_map = {'concise': 150, 'balanced': 500, 'verbose': 2000}
+    # Determine length instruction based on user preference
+    # We use prompt engineering to control length instead of max_tokens to prevent cut-offs
     user_pref = user.response_length if user else 'balanced'
-    max_tokens = length_map.get(user_pref, 500)
+    
+    length_instruction = ""
+    if user_pref == 'concise':
+        length_instruction = " (Keep your response concise and brief.)"
+    elif user_pref == 'verbose':
+        length_instruction = " (Provide a detailed and comprehensive response.)"
+
+    # Prepare messages for the API call, appending instruction to the prompt
+    messages = history + [{"role": "user", "content": user_prompt + length_instruction}]
+
+    # Always allow a high token limit so the AI can finish its sentence
+    max_tokens = 4000 
 
     def generate():
         full_response_text = ""
@@ -350,7 +357,7 @@ def start_roleplay():
         startup_payload = {
             "model": "qwen/qwen3-32b",
             "messages": history + [{"role": "user", "content": f"Start the roleplay now based on the scenario: {scenario}. Write exactly 2 short paragraphs to set the scene."}],
-            "max_tokens": 500
+            "max_tokens": 4000
         }
         
         response = requests.post(url, headers=headers, json=startup_payload)
