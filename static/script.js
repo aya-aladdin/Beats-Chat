@@ -19,6 +19,8 @@ document.addEventListener('DOMContentLoaded', () => {
         abortController: new AbortController(),
         menuOptions: [],
         menuSelectionIndex: -1,
+        chatInterval: null,
+        lastChatId: 0
     };
 
     const PROMPT = `&gt;`;
@@ -81,6 +83,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 case 'menu': await handleMenu(commandToProcess); break;
                 case 'chat': await handleChat(commandToProcess); break;
                 case 'profile': await handleProfile(commandToProcess); break;
+                case 'global_chat': await handleGlobalChat(commandToProcess); break;
                 case 'beats': await handleBeats(commandToProcess); break;
                 case 'persona': await handlePersona(commandToProcess); break;
                 case 'settings': await handleSettings(commandToProcess); break;
@@ -116,7 +119,7 @@ document.addEventListener('DOMContentLoaded', () => {
         switch (state.subState) {
             case 'prompt':
                 if (choice === '1') {
-                    state.currentUser = { username: 'Guest', chats_sent: 0, beats: 0, roleplay_unlocked: false, persona: 'helpful', ai_name: 'AI', roleplay_chats_required: 3, theme: 'default', font_size: 'normal', response_length: 'balanced' };
+                    state.currentUser = { username: 'Guest', chats_sent: 0, beats: 0, roleplay_unlocked: false, global_chat_unlocked: false, persona: 'helpful', ai_name: 'AI', roleplay_chats_required: 3, global_chat_req: 5, theme: 'default', font_size: 'normal', response_length: 'balanced' };
                     localStorage.setItem('currentUser', JSON.stringify(state.currentUser));
                     applyPreferences();
 
@@ -208,13 +211,15 @@ document.addEventListener('DOMContentLoaded', () => {
         state.subState = 'prompt';
         clearScreen();
         const roleplayStatus = state.currentUser?.roleplay_unlocked ? "UNLOCKED ✅" : "LOCKED 🔒";
+        const globalChatStatus = state.currentUser?.global_chat_unlocked ? "UNLOCKED ✅" : "LOCKED 🔒";
         await type("=== MAIN MENU ===");
         await printMenuOption("1", "[1] Talk to AI");
         await printMenuOption("2", `[2] Roleplay Mode (${roleplayStatus})`);
-        await printMenuOption("3", "[3] Beats & Upgrades");
-        await printMenuOption("4", "[4] Settings");
-        await printMenuOption("5", "[5] Profile Stats");
-        await printMenuOption("6", "[6] Exit");
+        await printMenuOption("3", `[3] Global Chat Room (${globalChatStatus})`);
+        await printMenuOption("4", "[4] Beats & Upgrades");
+        await printMenuOption("5", "[5] Settings");
+        await printMenuOption("6", "[6] Profile Stats");
+        await printMenuOption("7", "[7] Exit");
     }
 
     async function handleMenu(command) {
@@ -237,25 +242,39 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
                 break;
             case '3':
+                if (state.currentUser?.global_chat_unlocked) {
+                    await enterGlobalChat();
+                } else {
+                    await type("Global Chat Room is LOCKED. 🔒\nUnlock this feature from the 'Beats & Upgrades' menu.");
+                }
+                break;
+            case '4':
                 state.appState = 'beats';
                 clearScreen();
                 const roleplayChatsRequired = state.currentUser?.roleplay_chats_required || 3;
+                const globalChatReq = state.currentUser?.global_chat_req || 5;
                 await type("=== Beats & Upgrades ===");
                 await type(`Current Chats Sent: ${state.currentUser?.chats_sent || 0}`);
                 await type("\nAvailable Upgrades:");
                 if (state.currentUser?.roleplay_unlocked) {
-                    await printMenuOption("1", "[1] Roleplay Mode (UNLOCKED)");
+                    await printMenuOption("1", "[1] Roleplay Mode (UNLOCKED ✅)");
                 } else {
-                    await printMenuOption("1", `[1] Unlock Roleplay Mode (Requires: ${roleplayChatsRequired} Chats)`);
+                    await printMenuOption("1", `[1] Unlock Roleplay Mode (Cost: ${roleplayChatsRequired} Chats)`);
                 }
+                if (state.currentUser?.global_chat_unlocked) {
+                    await printMenuOption("2", "[2] Global Chat Room (UNLOCKED ✅)");
+                } else {
+                    await printMenuOption("2", `[2] Unlock Global Chat (Cost: ${globalChatReq} Chats)`);
+                }
+
                 await type("\nType a number to purchase or 'exit' to return.");
                 break;
-            case '4':
+            case '5':
                 state.appState = 'settings';
                 clearScreen();
                 await showSettingsMenu();
                 break;
-            case '5':
+            case '6':
                 state.appState = 'profile';
                 if (state.currentUser.username !== 'Guest') {
                     await updateUserStats();
@@ -268,7 +287,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 await type(`ROLEPLAY UNLOCKED: ${state.currentUser?.roleplay_unlocked ? 'YES' : 'NO'}`);
                 await type("\nType 'exit' to return to menu.");
                 break;
-            case '6':
+            case '7':
             case 'exit':
                 await type("Logging out...");
                 await fetch('/api/logout', { method: 'POST' });
@@ -413,6 +432,82 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
+    async function enterGlobalChat() {
+        state.appState = 'global_chat';
+        clearScreen();
+        await type("Connecting to encrypted global frequency...");
+        await new Promise(r => setTimeout(r, 800));
+        clearScreen();
+        addToOutput("<div class='text-gray-500'>=== GLOBAL CHAT ROOM ===<br>Type 'exit' to disconnect.</div><br>");
+        
+        // Initial Fetch
+        await fetchGlobalMessages();
+        
+        // Start Polling
+        if (state.chatInterval) clearInterval(state.chatInterval);
+        state.chatInterval = setInterval(fetchGlobalMessages, 2000);
+    }
+
+    async function handleGlobalChat(command) {
+        if (command.toLowerCase() === 'exit') {
+            if (state.chatInterval) clearInterval(state.chatInterval);
+            await showMainMenu();
+            return;
+        }
+        
+        // Send Message
+        try {
+            await fetch('/api/global_chat/send', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ content: command })
+            });
+            // Immediate fetch to show your own message quickly
+            await fetchGlobalMessages();
+        } catch (e) {
+            console.error(e);
+        }
+    }
+
+    async function fetchGlobalMessages() {
+        // Don't fetch if we left the screen
+        if (state.appState !== 'global_chat') {
+            if (state.chatInterval) clearInterval(state.chatInterval);
+            return;
+        }
+
+        try {
+            const res = await fetch('/api/global_chat/messages');
+            if (!res.ok) return;
+            const msgs = await res.json();
+            
+            // We just render the whole list for simplicity in this terminal view
+            // To prevent flickering, we only append new ones or replace if list changed drastically
+            // For now, let's clear and re-render only the message area.
+            // Actually, for a terminal, we usually just append. 
+            // But "Chat Room" implies seeing history.
+            // Let's implement a simple render:
+            
+            const chatAreaId = 'global-chat-area';
+            let chatArea = document.getElementById(chatAreaId);
+            if (!chatArea) {
+                chatArea = document.createElement('div');
+                chatArea.id = chatAreaId;
+                // Insert before the input line area
+                output.innerHTML = "<div class='text-gray-500'>=== GLOBAL CHAT ROOM ===<br>Type 'exit' to disconnect.</div><br>";
+                output.appendChild(chatArea);
+            }
+            
+            chatArea.innerHTML = msgs.map(m => 
+                `<div class="mb-1"><span class="text-gray-500">[${m.time}]</span> <span class="font-bold text-cyan-400">${m.user}:</span> ${parseMarkdown(m.content)}</div>`
+            ).join('');
+            
+            terminal.scrollTop = terminal.scrollHeight;
+        } catch (e) {
+            console.error(e);
+        }
+    }
+
     async function handleProfile(command) {
         if (command.toLowerCase() === 'exit') await showMainMenu();
     }
@@ -433,6 +528,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 return;
             }
             await purchaseRoleplayUnlock();
+        } else if (choice === '2') {
+            if (state.currentUser?.global_chat_unlocked) {
+                await type("You have already unlocked this feature.");
+                return;
+            }
+            await purchaseGlobalChatUnlock();
         } else {
             await type("Invalid selection.");
         }
@@ -751,7 +852,24 @@ document.addEventListener('DOMContentLoaded', () => {
             await type(`Failed: ${errorData.error}`);
             await type("Returning to upgrades menu...");
             await new Promise(r => setTimeout(r, 1500));
-            await handleMenu('3');
+            await handleMenu('4'); // Return to Beats menu
+        }
+    }
+
+    async function purchaseGlobalChatUnlock() {
+        const response = await fetch('/api/unlock_global_chat', { method: 'POST' });
+        if (response.ok) {
+            state.currentUser = await response.json();
+            await type("Success! Uplink established. Global Chat unlocked.");
+            await type("Returning to main menu...");
+            await new Promise(r => setTimeout(r, 1500));
+            await showMainMenu();
+        } else {
+            const errorData = await response.json();
+            await type(`Failed: ${errorData.error}`);
+            await type("Returning to upgrades menu...");
+            await new Promise(r => setTimeout(r, 1500));
+            await handleMenu('4');
         }
     }
 

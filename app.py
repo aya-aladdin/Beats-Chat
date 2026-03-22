@@ -20,6 +20,7 @@ bcrypt = Bcrypt(app)
 CHAT_SESSIONS = {}
 
 ROLEPLAY_CHATS_REQUIRED = 3
+GLOBAL_CHAT_REQ = 5
 
 PERSONAS = {
     'helpful': {
@@ -60,6 +61,7 @@ class User(db.Model):
     chats_sent = db.Column(db.Integer, default=0)
     beats = db.Column(db.Integer, default=0)
     roleplay_unlocked = db.Column(db.Boolean, default=False)
+    global_chat_unlocked = db.Column(db.Boolean, default=False)
     ai_name = db.Column(db.String(20), nullable=False, default='AI')
     font_size = db.Column(db.String(20), default='normal')
     theme = db.Column(db.String(20), default='default')
@@ -71,9 +73,11 @@ class User(db.Model):
             "chats_sent": self.chats_sent,
             "beats": self.beats,
             "roleplay_unlocked": self.roleplay_unlocked,
+            "global_chat_unlocked": self.global_chat_unlocked,
             "persona": session.get('persona', DEFAULT_PERSONA),
             "ai_name": self.ai_name,
             "roleplay_chats_required": ROLEPLAY_CHATS_REQUIRED,
+            "global_chat_req": GLOBAL_CHAT_REQ,
             "font_size": self.font_size,
             "theme": self.theme,
             "response_length": self.response_length
@@ -85,6 +89,12 @@ class ChatSession(db.Model):
     name = db.Column(db.String(50))
     scenario = db.Column(db.String(200))
     history = db.Column(db.Text, default='[]')
+    timestamp = db.Column(db.DateTime, default=datetime.utcnow)
+
+class GlobalMessage(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    username = db.Column(db.String(20), nullable=False)
+    content = db.Column(db.String(200), nullable=False)
     timestamp = db.Column(db.DateTime, default=datetime.utcnow)
 
 @app.route('/')
@@ -338,6 +348,45 @@ def unlock_roleplay():
     else:
         return jsonify({"error": f"Requires {ROLEPLAY_CHATS_REQUIRED} chats sent."}), 400
 
+@app.route('/api/unlock_global_chat', methods=['POST'])
+def unlock_global_chat():
+    if 'user_id' not in session:
+        return jsonify({"error": "Not logged in"}), 401
+
+    user = User.query.get(session['user_id'])
+    if not user:
+        return jsonify({"error": "User not found."}), 404
+
+    if user.chats_sent >= GLOBAL_CHAT_REQ:
+        user.global_chat_unlocked = True
+        db.session.commit()
+        return jsonify(user.to_dict())
+    else:
+        return jsonify({"error": f"Requires {GLOBAL_CHAT_REQ} chats sent."}), 400
+
+@app.route('/api/global_chat/messages', methods=['GET'])
+def get_global_messages():
+    # Return last 50 messages
+    msgs = GlobalMessage.query.order_by(GlobalMessage.timestamp.desc()).limit(50).all()
+    # Reverse to show oldest first in the list
+    data = [{"user": m.username, "content": m.content, "time": m.timestamp.strftime("%H:%M")} for m in msgs[::-1]]
+    return jsonify(data)
+
+@app.route('/api/global_chat/send', methods=['POST'])
+def send_global_message():
+    if 'user_id' not in session:
+        return jsonify({"error": "Not logged in"}), 401
+    
+    user = User.query.get(session['user_id'])
+    data = request.get_json()
+    content = data.get('content', '').strip()
+    
+    if content:
+        msg = GlobalMessage(username=user.username, content=content[:200])
+        db.session.add(msg)
+        db.session.commit()
+    return jsonify({"status": "sent"})
+
 @app.route('/api/roleplay/sessions', methods=['GET'])
 def get_roleplay_sessions():
     if 'user_id' not in session:
@@ -475,6 +524,13 @@ def check_and_migrate_db():
                 except Exception:
                     print("Migrating DB: Adding response_length column...")
                     conn.execute(text("ALTER TABLE user ADD COLUMN response_length VARCHAR(20) DEFAULT 'balanced'"))
+                    conn.commit()
+
+                try:
+                    conn.execute(text("SELECT global_chat_unlocked FROM user LIMIT 1"))
+                except Exception:
+                    print("Migrating DB: Adding global_chat_unlocked column...")
+                    conn.execute(text("ALTER TABLE user ADD COLUMN global_chat_unlocked BOOLEAN DEFAULT 0"))
                     conn.commit()
     except Exception as e:
         print(f"Migration Warning: {e}")
