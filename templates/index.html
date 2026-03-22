@@ -4,9 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>AI Terminal</title>
-    <!-- Tailwind CSS via CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- Google Fonts for a monospace font -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet">
@@ -14,20 +12,18 @@
 </head>
 <body class="bg-black text-green-400 font-mono text-sm">
     <div class="flex h-screen w-full">
-        <!-- Sidebar for Saved Chats -->
         <div id="sidebar" class="hidden w-64 border-r border-gray-800 bg-gray-900/50 p-4 overflow-y-auto flex-shrink-0 flex-col">
             <h2 class="text-lg font-bold mb-4 border-b border-gray-700 pb-2">SAVED LOGS</h2>
             <div id="sidebar-content" class="flex-col gap-2 flex"></div>
         </div>
 
         <div id="terminal" class="flex-1 p-4 h-full overflow-y-auto relative flex flex-col">
-            <div id="output" class="flex-grow"></div>
+            <div id="output"></div>
             <div id="input-wrapper" class="flex items-center mt-2 flex-shrink-0">
                 <span class="text-cyan-400">&gt;</span>
                 <span id="input-line" class="ml-2 break-all"></span>
                 <span id="cursor" class="w-2 h-4 ml-1 animate-blink inline-block align-middle"></span>
             </div>
-            <!-- A hidden input to capture keyboard events on mobile -->
             <input type="text" id="hidden-input" class="opacity-0 w-0 h-0 absolute bottom-0">
         </div>
     </div>

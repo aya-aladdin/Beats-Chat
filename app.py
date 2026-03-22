@@ -10,18 +10,15 @@ from datetime import datetime
 
 app = Flask(__name__)
 
-load_dotenv()  # Load environment variables from .env file
+load_dotenv()
 
-# --- Configuration ---
-app.config['SECRET_KEY'] = os.urandom(24)
+app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'dev_key_fixed_for_restart')
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///site.db'
 db = SQLAlchemy(app)
 bcrypt = Bcrypt(app)
 
-# --- In-Memory Chat Storage ---
 CHAT_SESSIONS = {}
 
-# --- Application Constants ---
 ROLEPLAY_CHATS_REQUIRED = 3
 
 PERSONAS = {
@@ -43,20 +40,19 @@ DEFAULT_PERSONA = 'helpful'
 
 def get_current_persona_prompt():
     """Gets the full prompt text for the user's current persona."""
-    ai_name = 'AI' # Default for guests
+    ai_name = 'AI'
     if 'user_id' in session:
         user = User.query.get(session['user_id'])
         if user:
             ai_name = user.ai_name
         persona_key = session.get('persona', DEFAULT_PERSONA)
-    else: # Guest user
+    else:
         persona_key = request.json.get('persona', DEFAULT_PERSONA)
 
     prompt_template = PERSONAS.get(persona_key, PERSONAS[DEFAULT_PERSONA])['prompt']
     return prompt_template.format(ai_name=ai_name)
 
 
-# --- Database Models ---
 class User(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(20), unique=True, nullable=False)
@@ -75,7 +71,7 @@ class User(db.Model):
             "chats_sent": self.chats_sent,
             "beats": self.beats,
             "roleplay_unlocked": self.roleplay_unlocked,
-            "persona": session.get('persona', DEFAULT_PERSONA), # Include current persona
+            "persona": session.get('persona', DEFAULT_PERSONA),
             "ai_name": self.ai_name,
             "roleplay_chats_required": ROLEPLAY_CHATS_REQUIRED,
             "font_size": self.font_size,
@@ -86,16 +82,14 @@ class User(db.Model):
 class ChatSession(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
-    name = db.Column(db.String(50)) # Character Name
-    scenario = db.Column(db.String(200)) # Short snippet of scenario
-    history = db.Column(db.Text, default='[]') # JSON string
+    name = db.Column(db.String(50))
+    scenario = db.Column(db.String(200))
+    history = db.Column(db.Text, default='[]')
     timestamp = db.Column(db.DateTime, default=datetime.utcnow)
 
 @app.route('/')
 def index():
     return render_template('index.html')
-
-# --- API Routes ---
 
 @app.route('/api/register', methods=['POST'])
 def register():
@@ -105,7 +99,6 @@ def register():
     if User.query.filter_by(username=username).first():
         return jsonify({"error": "Username already exists."}), 409
     
-    # Clear any existing chat session (e.g. from Guest mode)
     chat_session_id = session.get('chat_session_id')
     if chat_session_id and chat_session_id in CHAT_SESSIONS:
         del CHAT_SESSIONS[chat_session_id]
@@ -127,7 +120,6 @@ def login():
     password = data.get('password')
     user = User.query.filter_by(username=username).first()
     if user and bcrypt.check_password_hash(user.password, password):
-        # Clear any existing chat session to ensure a fresh start
         chat_session_id = session.get('chat_session_id')
         if chat_session_id and chat_session_id in CHAT_SESSIONS:
             del CHAT_SESSIONS[chat_session_id]
@@ -135,13 +127,12 @@ def login():
         session.pop('active_db_id', None)
 
         session['user_id'] = user.id
-        session['persona'] = session.get('persona', DEFAULT_PERSONA) # Restore or set default
+        session['persona'] = session.get('persona', DEFAULT_PERSONA)
         return jsonify(user.to_dict())
     return jsonify({"error": "Invalid credentials."}), 401
 
 @app.route('/api/logout', methods=['POST'])
 def logout():
-    # Clear server-side chat memory
     chat_session_id = session.get('chat_session_id')
     if chat_session_id and chat_session_id in CHAT_SESSIONS:
         del CHAT_SESSIONS[chat_session_id]
@@ -153,7 +144,6 @@ def logout():
 
 @app.route('/api/reset_chat', methods=['POST'])
 def reset_chat():
-    # Explicitly clear chat memory without logging out
     chat_session_id = session.get('chat_session_id')
     if chat_session_id and chat_session_id in CHAT_SESSIONS:
         del CHAT_SESSIONS[chat_session_id]
@@ -222,23 +212,28 @@ def chat_proxy():
     user = None
     if 'user_id' in session:
         user = User.query.get(session['user_id'])
-        if not user: # Add validation check
+        if not user:
             return Response("Error: Authenticated user not found.", status=500, content_type='text/plain')
         user.chats_sent += 1
         user.beats += 1
         db.session.commit()
     
-    # --- Memory Management ---
-    # Ensure the user has a unique session ID for chat memory
     if 'chat_session_id' not in session:
         session['chat_session_id'] = os.urandom(16).hex()
     session_id = session['chat_session_id']
 
-    # Retrieve or initialize history
-    history = CHAT_SESSIONS.get(session_id, [])
+    history = CHAT_SESSIONS.get(session_id)
+
+    if not history and 'active_db_id' in session:
+        db_chat = ChatSession.query.get(session['active_db_id'])
+        if db_chat:
+            try:
+                history = json.loads(db_chat.history)
+                CHAT_SESSIONS[session_id] = history
+            except:
+                pass
+
     if not history:
-        # Initialize with the system prompt/persona
-        # Using OpenAI format: system, user, assistant
         history = [
             {"role": "system", "content": get_current_persona_prompt()},
             {"role": "assistant", "content": "Acknowledged. Systems online. Ready for input, operator."}
@@ -248,8 +243,6 @@ def chat_proxy():
     is_regenerate = request.json.get('regenerate', False)
     user_prompt = request.json.get('prompt', '')
     
-    # Determine length instruction based on user preference
-    # We use prompt engineering to control length instead of max_tokens to prevent cut-offs
     user_pref = user.response_length if user else 'balanced'
     
     length_instruction = ""
@@ -259,20 +252,19 @@ def chat_proxy():
         length_instruction = " (Provide a detailed and comprehensive response.)"
 
     if is_regenerate:
-        # Logic: Pop the last AI response, use the existing history (ending in user) to generate
         if history and history[-1]['role'] == 'assistant':
             history.pop()
         
-        # Use the history as is (it should already have the user prompt at the end)
-        messages = history
-        # Re-append instruction to the last user message in the transient 'messages' list
+        messages = [msg.copy() for msg in history]
+
         if messages and messages[-1]['role'] == 'user':
             messages[-1]['content'] += length_instruction
     else:
-        # Standard flow: Append new user prompt
         messages = history + [{"role": "user", "content": user_prompt + length_instruction}]
 
-    # Always allow a high token limit so the AI can finish its sentence
+    if len(messages) > 21:
+        messages = [messages[0]] + messages[-20:]
+
     max_tokens = 4000 
 
     def generate():
@@ -284,13 +276,12 @@ def chat_proxy():
                 "Content-Type": "application/json"
             }
             payload = {
-                "model": "qwen/qwen3-32b",
+                "model": "meta-llama/Meta-Llama-3.1-8B-Instruct",
                 "messages": messages,
                 "stream": True,
                 "max_tokens": max_tokens
             }
-            
-            with requests.post(url, headers=headers, json=payload, stream=True) as response:
+            with requests.post(url, headers=headers, json=payload, stream=True, timeout=60) as response:
                 if not response.ok:
                     yield f"Error: API returned {response.status_code} - {response.text}".encode('utf-8')
                     return
@@ -312,19 +303,14 @@ def chat_proxy():
                             except (json.JSONDecodeError, KeyError):
                                 continue
             
-            # --- Update Memory ---
-            # Append the completed turn to the session history
-            # We re-fetch from CHAT_SESSIONS to ensure we are appending to the current list
             current_history = CHAT_SESSIONS.get(session_id, [])
             
-            # Only append user prompt if it's a new chat, not a regen
             if not is_regenerate:
                 current_history.append({"role": "user", "content": user_prompt})
             
             current_history.append({"role": "assistant", "content": full_response_text})
             CHAT_SESSIONS[session_id] = current_history
 
-            # --- Persist to Database if active session ---
             if 'active_db_id' in session:
                 db_chat = ChatSession.query.get(session['active_db_id'])
                 if db_chat:
@@ -357,7 +343,6 @@ def get_roleplay_sessions():
     if 'user_id' not in session:
         return jsonify({"error": "Not logged in"}), 401
     
-    # Get sessions ordered by newest first
     chats = ChatSession.query.filter_by(user_id=session['user_id']).order_by(ChatSession.timestamp.desc()).all()
     results = []
     for c in chats:
@@ -381,7 +366,6 @@ def load_roleplay_session():
     if not chat:
         return jsonify({"error": "Chat not found"}), 404
 
-    # Restore to memory
     new_session_id = os.urandom(16).hex()
     session['chat_session_id'] = new_session_id
     session['active_db_id'] = chat.id
@@ -405,12 +389,10 @@ def start_roleplay():
     user_gender = data.get('user_gender')
     scenario = data.get('scenario')
 
-    # Reset Chat History for the new roleplay
     if 'chat_session_id' not in session:
         session['chat_session_id'] = os.urandom(16).hex()
     session_id = session['chat_session_id']
 
-    # Build System Prompt with Roleplay Context
     base_prompt = get_current_persona_prompt()
     roleplay_context = (
         f"\n\n[ROLEPLAY SCENARIO]\n"
@@ -425,20 +407,17 @@ def start_roleplay():
     
     system_message = base_prompt + roleplay_context
     
-    # Initialize History
     history = [{"role": "system", "content": system_message}]
     
-    # Generate Opening Line from AI
     try:
         url = "https://ai.hackclub.com/proxy/v1/chat/completions"
         headers = {
             "Authorization": "Bearer sk-hc-v1-aad18691f5b94ed8ae959cdbaf95600ea2df3328179a449097e83188c5183a91",
             "Content-Type": "application/json"
         }
-        # Ask AI to start the scene based on the context
         starter_prompt = f"Start the roleplay based on: {scenario}. Set the scene briefly and take the first action towards {user_name}. Remember: do not act as {user_name}."
         startup_payload = {
-            "model": "qwen/qwen3-32b",
+            "model": "meta-llama/Meta-Llama-3.1-8B-Instruct",
             "messages": history + [{"role": "user", "content": starter_prompt}],
             "max_tokens": 4000
         }
@@ -450,12 +429,10 @@ def start_roleplay():
         if not ai_opener:
             ai_opener = "Scenario initialized. (No output generated)"
         
-        # Save to history so the chat can continue from here (including the trigger prompt)
         history.append({"role": "user", "content": starter_prompt})
         history.append({"role": "assistant", "content": ai_opener})
         CHAT_SESSIONS[session_id] = history
 
-        # --- Save to DB ---
         new_chat = ChatSession(
             user_id=session['user_id'],
             name=user_name,
@@ -469,7 +446,6 @@ def start_roleplay():
         return jsonify({"message": "Roleplay started.", "opener": ai_opener})
 
     except Exception as e:
-        # Fallback if AI fails to generate opener
         fallback = "Scenario initialized. Ready for your input."
         history.append({"role": "assistant", "content": fallback})
         CHAT_SESSIONS[session_id] = history
@@ -480,15 +456,13 @@ def check_and_migrate_db():
     try:
         with app.app_context():
             with db.engine.connect() as conn:
-                # Check and add font_size
                 try:
                     conn.execute(text("SELECT font_size FROM user LIMIT 1"))
                 except Exception:
                     print("Migrating DB: Adding font_size column...")
                     conn.execute(text("ALTER TABLE user ADD COLUMN font_size VARCHAR(20) DEFAULT 'normal'"))
-                    conn.commit() # Ensure changes are saved
+                    conn.commit()
 
-                # Check and add theme
                 try:
                     conn.execute(text("SELECT theme FROM user LIMIT 1"))
                 except Exception:
@@ -496,7 +470,6 @@ def check_and_migrate_db():
                     conn.execute(text("ALTER TABLE user ADD COLUMN theme VARCHAR(20) DEFAULT 'default'"))
                     conn.commit()
 
-                # Check and add response_length
                 try:
                     conn.execute(text("SELECT response_length FROM user LIMIT 1"))
                 except Exception:
@@ -509,5 +482,5 @@ def check_and_migrate_db():
 if __name__ == '__main__':
     with app.app_context():
         db.create_all()
-        check_and_migrate_db() # Run migration check
+        check_and_migrate_db()
     app.run(debug=True)

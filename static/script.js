@@ -7,25 +7,21 @@ document.addEventListener('DOMContentLoaded', () => {
     const sidebar = document.getElementById('sidebar');
     const sidebarContent = document.getElementById('sidebar-content');
 
-    // --- State Management ---
     let state = {
-        appState: 'login', // login, menu, chat, profile, beats, persona, settings, roleplay_setup
-        subState: 'prompt', // For multi-step inputs like username/password
-        tempData: {}, // To hold username during login flow
+        appState: 'login',
+        subState: 'prompt',
+        tempData: {},
         isExecuting: false,
-        currentUser: null, // { username, chats_sent, beats, roleplay_unlocked }
+        currentUser: null,
         commandHistory: [],
         historyIndex: -1,
         currentInput: "",
         abortController: new AbortController(),
-        // Accessibility & Navigation
-        menuOptions: [], // Array of { key, element, action }
+        menuOptions: [],
         menuSelectionIndex: -1,
     };
 
     const PROMPT = `&gt;`;
-
-    // --- Core Functions ---
 
     const focusInput = () => hiddenInput.focus();
     terminal.addEventListener('click', () => {
@@ -35,7 +31,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const type = async (text, delay = 20) => {
         const element = createResponseElement();
         for (let i = 0; i < text.length; i++) {
-            // This check is for masking the "Enter password:" prompt itself if we wanted to, but it's not what we need for live input masking.
             const char = (state.appState === 'login' && (state.subState === 'password' || state.subState === 'register_password')) ? '*' : text.charAt(i);
             element.innerHTML += char;
             terminal.scrollTop = terminal.scrollHeight;
@@ -44,32 +39,27 @@ document.addEventListener('DOMContentLoaded', () => {
         return element;
     };
 
-    // Helper to print a clickable/selectable menu option
     const printMenuOption = async (key, text, action) => {
         const div = document.createElement('div');
         div.classList.add('menu-option');
         div.innerHTML = text;
         div.onclick = () => {
-            inputLine.textContent = key; // Visual feedback
+            inputLine.textContent = key;
             processCommand(key);
         };
         output.appendChild(div);
         terminal.scrollTop = terminal.scrollHeight;
         
-        // Register for keyboard navigation
         state.menuOptions.push({ key, element: div, action: () => processCommand(key) });
-        await new Promise(resolve => setTimeout(resolve, 50)); // Small delay for effect
+        await new Promise(resolve => setTimeout(resolve, 50));
     };
 
     const processCommand = async (command) => {
         state.isExecuting = true;
         try {
-            // --- CHANGE 1: Immediate Input Clearing ---
-            // Capture the command and clear the input line visually and from state *before* processing.
             const commandToProcess = command;
             state.currentInput = "";
             inputLine.textContent = "";
-            // Clear menu options on new command to reset navigation
             state.menuOptions = [];
             state.menuSelectionIndex = -1;
 
@@ -78,7 +68,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (state.appState === 'chat') {
                 createChatBubble(displayCommand, 'user');
             } else {
-                addToOutput(`${PROMPT} ${displayCommand}`); // Show the processed command in the output
+                addToOutput(`${PROMPT} ${displayCommand}`);
             }
 
             if (commandToProcess.trim() !== '' && state.appState === 'chat') {
@@ -86,7 +76,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 state.historyIndex = -1;
             }
             
-            // State-based command processing
             switch (state.appState) {
                 case 'login': await handleLogin(commandToProcess); break;
                 case 'menu': await handleMenu(commandToProcess); break;
@@ -94,7 +83,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 case 'profile': await handleProfile(commandToProcess); break;
                 case 'beats': await handleBeats(commandToProcess); break;
                 case 'persona': await handlePersona(commandToProcess); break;
-                case 'settings': await handleSettings(commandToProcess); break; // New handler
+                case 'settings': await handleSettings(commandToProcess); break;
                 case 'accessibility': await handleAccessibility(commandToProcess); break;
                 case 'roleplay_setup': await handleRoleplaySetup(commandToProcess); break;
                 case 'set_ai_name': await handleSetAiName(commandToProcess); break;
@@ -109,8 +98,6 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }
     };
-
-    // --- State Handlers ---
 
     async function showLoginScreen() {
         state.appState = 'login';
@@ -128,20 +115,19 @@ document.addEventListener('DOMContentLoaded', () => {
         const choice = command.trim();
         switch (state.subState) {
             case 'prompt':
-                if (choice === '1') { // Guest
-                    // Initialize default guest settings
+                if (choice === '1') {
                     state.currentUser = { username: 'Guest', chats_sent: 0, beats: 0, roleplay_unlocked: false, persona: 'helpful', ai_name: 'AI', roleplay_chats_required: 3, theme: 'default', font_size: 'normal', response_length: 'balanced' };
-                    localStorage.setItem('currentUser', JSON.stringify(state.currentUser)); // Save guest session
+                    localStorage.setItem('currentUser', JSON.stringify(state.currentUser));
                     applyPreferences();
 
                     await type("\nAccess Granted. Welcome, Guest.");
                     await type("Loading main interface...");
                     await new Promise(r => setTimeout(r, 1000));
                     await showMainMenu();
-                } else if (choice === '2') { // Login
+                } else if (choice === '2') {
                     state.subState = 'username';
                     await type("Enter username:");
-                } else if (choice === '3') { // Register
+                } else if (choice === '3') {
                     state.subState = 'register_username';
                     await type("Enter new username:");
                 } else {
@@ -169,7 +155,6 @@ document.addEventListener('DOMContentLoaded', () => {
                     await new Promise(r => setTimeout(r, 1000));
                     await showMainMenu();
                 } else {
-                    // Handle non-JSON errors (like 500 server error)
                     let msg = "Login failed.";
                     try {
                         const err = await loginResponse.json();
@@ -227,13 +212,12 @@ document.addEventListener('DOMContentLoaded', () => {
         await printMenuOption("1", "[1] Talk to AI");
         await printMenuOption("2", `[2] Roleplay Mode (${roleplayStatus})`);
         await printMenuOption("3", "[3] Beats & Upgrades");
-        await printMenuOption("4", "[4] Settings"); // Renamed from "Persona Settings"
+        await printMenuOption("4", "[4] Settings");
         await printMenuOption("5", "[5] Profile Stats");
         await printMenuOption("6", "[6] Exit");
     }
 
     async function handleMenu(command) {
-        // Make the command check case-insensitive
         switch(command.trim().toLowerCase()) {
             case '1':
                 state.appState = 'chat';
@@ -245,7 +229,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     state.appState = 'roleplay_setup';
                     state.subState = 'name';
                     clearScreen();
-                    await updateSidebar(); // Show saved chats sidebar
+                    await updateSidebar();
                     await type("=== ROLEPLAY SETUP ===");
                     await type("Enter your character's name:");
                 } else {
@@ -255,7 +239,7 @@ document.addEventListener('DOMContentLoaded', () => {
             case '3':
                 state.appState = 'beats';
                 clearScreen();
-                const roleplayChatsRequired = state.currentUser?.roleplay_chats_required || 3; // Use backend value, with fallback
+                const roleplayChatsRequired = state.currentUser?.roleplay_chats_required || 3;
                 await type("=== Beats & Upgrades ===");
                 await type(`Current Chats Sent: ${state.currentUser?.chats_sent || 0}`);
                 await type("\nAvailable Upgrades:");
@@ -273,7 +257,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 break;
             case '5':
                 state.appState = 'profile';
-                // To ensure we have the latest stats, especially after chatting
                 if (state.currentUser.username !== 'Guest') {
                     await updateUserStats();
                 }
@@ -286,9 +269,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 await type("\nType 'exit' to return to menu.");
                 break;
             case '6':
-            case 'exit': // Allow user to type 'exit' as well
+            case 'exit':
                 await type("Logging out...");
-                // Always call logout on the server to clear session/memory
                 await fetch('/api/logout', { method: 'POST' });
                 localStorage.removeItem('currentUser');
                 await new Promise(r => setTimeout(r, 1000));
@@ -301,7 +283,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
     async function handleChat(command) {
         if (command.toLowerCase() === 'exit') {
-            // Clear memory on exit as requested
             await fetch('/api/reset_chat', { method: 'POST' });
             await showMainMenu();
             return;
@@ -350,11 +331,10 @@ document.addEventListener('DOMContentLoaded', () => {
                     
                     if (response.ok) {
                         state.appState = 'chat';
-                        sidebar.classList.add('hidden'); // Hide sidebar on start
+                        sidebar.classList.add('hidden');
                         clearScreen();
                         await type("=== ROLEPLAY STARTED ===");
                         
-                        // Create bubble with roleplay opener and attach version info
                         const bubble = createChatBubble(data.opener, 'ai');
                         updateBubbleControls(bubble);
                     } else {
@@ -372,7 +352,7 @@ document.addEventListener('DOMContentLoaded', () => {
     async function updateSidebar() {
         try {
             const response = await fetch('/api/roleplay/sessions');
-            if (!response.ok) return; // If guest or error, just don't show sidebar
+            if (!response.ok) return;
             
             const sessions = await response.json();
             sidebarContent.innerHTML = '';
@@ -417,7 +397,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 clearScreen();
                 await type("=== SESSION RESTORED ===");
                 
-                // Reconstruct full history
                 if (data.history) {
                     data.history.forEach(msg => {
                         if (msg.role === 'user') {
@@ -474,7 +453,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 clearScreen();
                 await type(`=== PERSONA SETTINGS ===`);
                 await type("Select a persona for Aya:");
-                // --- CHANGE 2: Indicate Selected Persona ---
                 const currentPersona = state.currentUser?.persona;
                 await printMenuOption("1", `[1] Helpful Assistant ${currentPersona === 'helpful' ? '(Selected)' : ''}`);
                 await printMenuOption("2", `[2] Cocky Genius ${currentPersona === 'cocky' ? '(Selected)' : ''}`);
@@ -553,7 +531,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (Object.keys(updates).length > 0) {
             await updatePreferences(updates);
             clearScreen();
-            await showAccessibilityMenu(); // Refresh to show checkmarks
+            await showAccessibilityMenu();
         } else {
             await type("Invalid selection.");
         }
@@ -567,8 +545,6 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
-        // For registered users, first verify the session is still active on the server.
-        // If not, update the name locally to prevent an error.
         const sessionCheckResponse = await fetch('/api/user_data');
         if (!sessionCheckResponse.ok) {
             state.currentUser.ai_name = newName;
@@ -585,7 +561,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const data = await response.json();
         await type(data.message || `Error: ${data.error}`);
         if (response.ok) {
-            await updateUserStats(); // Refresh user data to get the new name
+            await updateUserStats();
             await new Promise(r => setTimeout(r, 1000));
             await showSettingsMenu();
             state.appState = 'settings';
@@ -607,7 +583,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 return;
         }
 
-        // For guests, handle persona change on the client-side only
         if (state.currentUser.username === 'Guest') {
             state.currentUser.persona = personaKey;
             localStorage.setItem('currentUser', JSON.stringify(state.currentUser));
@@ -615,8 +590,6 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
-        // For registered users, first verify the session is still active on the server.
-        // If not, treat them like a guest for this action to prevent errors.
         const sessionCheckResponse = await fetch('/api/user_data');
         if (!sessionCheckResponse.ok) {
             state.currentUser.persona = personaKey;
@@ -634,7 +607,6 @@ document.addEventListener('DOMContentLoaded', () => {
         const data = await response.json();
         if (response.ok) {
             await type(data.message);
-            // Update local state to reflect the change immediately
             if (state.currentUser) {
                 state.currentUser.persona = personaKey;
             }
@@ -643,37 +615,41 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    // --- Utility Functions ---
-
     const parseMarkdown = (text) => {
         if (!text) return '';
-        // 1. Escape HTML to prevent injection and rendering issues
         let html = text
             .replace(/&/g, "&amp;")
             .replace(/</g, "&lt;")
             .replace(/>/g, "&gt;");
 
-        // 2. Code Blocks (``` ... ```)
         html = html.replace(/```(\w*)\n?([\s\S]*?)```/g, (match, lang, code) => {
             return `<pre><code class="language-${lang}">${code}</code></pre>`;
         });
 
-        // 3. Inline Code (` ... `)
         html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
 
-        // 4. Formatting (Bold & Italic)
         html = html.replace(/\*\*(.*?)\*\*/g, '<b>$1</b>');
         html = html.replace(/\*([^\*]+)\*/g, '<i>$1</i>');
 
-        // 5. Newlines to <br> (excluding pre blocks to preserve code formatting)
         return html.split(/(<pre[\s\S]*?<\/pre>)/g).map(segment => {
             return segment.startsWith('<pre') ? segment : segment.replace(/\n/g, '<br>');
         }).join('');
     };
 
     const fetchAIResponse = async (prompt, isRegen = false, targetBubble = null) => {
-        const responseElement = targetBubble || createChatBubble('', 'ai');
+        if (state.abortController) state.abortController.abort();
+        
         state.abortController = new AbortController();
+        state.isExecuting = true;
+
+        const responseElement = targetBubble || createChatBubble('', 'ai');
+        
+        const contentDiv = responseElement.querySelector('.msg-content');
+        if (contentDiv) {
+            contentDiv.innerHTML = '<div class="typing-indicator"><span></span><span></span><span></span></div>';
+            terminal.scrollTop = terminal.scrollHeight;
+        }
+        
         let fullResponse = "";
 
         try {
@@ -695,6 +671,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
             const reader = response.body.getReader();
             const decoder = new TextDecoder();
+            let lastUpdate = 0;
+
             while (true) {
                 const { value, done } = await reader.read();
                 if (done) break;
@@ -702,14 +680,19 @@ document.addEventListener('DOMContentLoaded', () => {
                 
                 fullResponse += chunk;
                 
-                // Update the content div inside the bubble
-                const contentDiv = responseElement.querySelector('.msg-content');
-                if (contentDiv) contentDiv.innerHTML = parseMarkdown(fullResponse);
-                
-                terminal.scrollTop = terminal.scrollHeight;
+                const now = Date.now();
+                if (now - lastUpdate > 50) {
+                    const contentDiv = responseElement.querySelector('.msg-content');
+                    if (contentDiv) contentDiv.innerHTML = parseMarkdown(fullResponse);
+                    terminal.scrollTop = terminal.scrollHeight;
+                    lastUpdate = now;
+                }
             }
             
-            // After streaming is done, save the version
+            const finalContentDiv = responseElement.querySelector('.msg-content');
+            if (finalContentDiv) finalContentDiv.innerHTML = parseMarkdown(fullResponse);
+            terminal.scrollTop = terminal.scrollHeight;
+            
             if (!responseElement.versions) {
                 responseElement.versions = [];
                 responseElement.currentVersion = -1;
@@ -719,7 +702,7 @@ document.addEventListener('DOMContentLoaded', () => {
             responseElement.currentVersion = responseElement.versions.length - 1;
             updateBubbleControls(responseElement);
             
-            await updateUserStats(); // Let the backend be the source of truth
+            await updateUserStats();
 
         } catch (error) {
             if (error.name === 'AbortError') {
@@ -727,25 +710,28 @@ document.addEventListener('DOMContentLoaded', () => {
             } else {
                 responseElement.textContent = `Error: ${error.message}`;
             }
+        } finally {
+            state.isExecuting = false;
         }
     };
 
     async function updateUserStats() {
-        // For guests, we just increment the local state
         if (state.currentUser.username === 'Guest') {
             state.currentUser.chats_sent++;
             state.currentUser.beats++;
             return;
         }
-        // For registered users, fetch the authoritative state from the server
         try {
             const response = await fetch('/api/user_data');
             if (response.ok) {
                 state.currentUser = await response.json();
-                // Keep localStorage in sync with the server's state
                 if (state.currentUser.username !== 'Guest') {
                     localStorage.setItem('currentUser', JSON.stringify(state.currentUser));
                 }
+            } else if (response.status === 401) {
+                await type("\n[System] Session expired. Logging out...");
+                localStorage.removeItem('currentUser');
+                await showLoginScreen();
             }
         } catch (error) {
             console.error("Could not update user stats:", error);
@@ -765,21 +751,17 @@ document.addEventListener('DOMContentLoaded', () => {
             await type(`Failed: ${errorData.error}`);
             await type("Returning to upgrades menu...");
             await new Promise(r => setTimeout(r, 1500));
-            await handleMenu('3'); // Re-show the beats menu
+            await handleMenu('3');
         }
     }
 
     async function updatePreferences(updates) {
-        // Mix into current local state
         state.currentUser = { ...state.currentUser, ...updates };
         
-        // Apply visual changes immediately
         applyPreferences();
 
-        // Save to LocalStorage
         localStorage.setItem('currentUser', JSON.stringify(state.currentUser));
 
-        // Sync with backend if logged in
         if (state.currentUser.username !== 'Guest') {
             try {
                 await fetch('/api/update_preferences', {
@@ -795,7 +777,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function applyPreferences() {
         const user = state.currentUser || {};
-        document.body.className = "bg-black"; // Reset base
+        document.body.className = "bg-black";
         if (user.theme && user.theme !== 'default') document.body.classList.add(`theme-${user.theme}`);
         if (user.font_size) document.body.classList.add(`font-size-${user.font_size}`);
     }
@@ -818,15 +800,13 @@ document.addEventListener('DOMContentLoaded', () => {
         div.classList.add('message-bubble');
         div.classList.add(sender === 'user' ? 'message-user' : 'message-ai');
         
-        // Inner container for text
         const contentDiv = document.createElement('div');
         contentDiv.classList.add('msg-content');
         contentDiv.innerHTML = parseMarkdown(text);
         div.appendChild(contentDiv);
 
-        // Init versions array for AI messages
         if (sender === 'ai') {
-            div.versions = text ? [text] : []; // If created with text (like RP opener), store it
+            div.versions = text ? [text] : [];
             div.currentVersion = 0;
         }
 
@@ -836,14 +816,12 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     const updateBubbleControls = (bubble) => {
-        // Remove existing controls
         const existing = bubble.querySelector('.message-controls');
         if (existing) existing.remove();
 
         const controls = document.createElement('div');
         controls.classList.add('message-controls');
         
-        // Navigation (< 1/3 >)
         if (bubble.versions.length > 1) {
             const prevBtn = document.createElement('span');
             prevBtn.className = 'control-btn';
@@ -864,7 +842,6 @@ document.addEventListener('DOMContentLoaded', () => {
             controls.appendChild(nextBtn);
         }
 
-        // Regenerate Button
         const regenBtn = document.createElement('span');
         regenBtn.className = 'control-btn ml-2';
         regenBtn.innerHTML = '[Regenerate]';
@@ -881,7 +858,6 @@ document.addEventListener('DOMContentLoaded', () => {
             bubble.querySelector('.msg-content').innerHTML = parseMarkdown(bubble.versions[newIndex]);
             updateBubbleControls(bubble);
             
-            // Sync with backend
             await fetch('/api/chat/update_history', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -894,19 +870,15 @@ document.addEventListener('DOMContentLoaded', () => {
         output.innerHTML = '';
     };
 
-    // --- Event Handlers ---
-
     document.addEventListener('paste', (e) => {
         if (state.isExecuting) return;
         e.preventDefault();
 
         const text = (e.clipboardData || window.clipboardData).getData('text');
         if (text) {
-            // Flatten newlines to spaces for single-line input
             const cleanText = text.replace(/[\r\n]+/g, ' ');
             state.currentInput += cleanText;
 
-            // Update visual input line
             if (state.subState === 'password' || state.subState === 'register_password') {
                 inputLine.textContent = state.currentInput.replace(/./g, '*');
             } else {
@@ -925,17 +897,14 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         if (e.key === 'Enter') {
-            // Check if we have a selected menu option via arrows
             if (state.menuOptions.length > 0 && state.menuSelectionIndex !== -1) {
                 const selected = state.menuOptions[state.menuSelectionIndex];
                 if (selected) {
-                     // Visual confirm
                     inputLine.textContent = selected.key;
                     selected.action();
                     return;
                 }
             }
-            // Allow empty commands for menu navigation
             if (state.currentInput.trim() || state.appState !== 'chat') {
                 processCommand(state.currentInput);
             }
@@ -944,17 +913,14 @@ document.addEventListener('DOMContentLoaded', () => {
         } else if (e.key === 'ArrowUp') {
             e.preventDefault();
             if (state.menuOptions.length > 0) {
-                // Menu Navigation
                 if (state.menuSelectionIndex < 0) state.menuSelectionIndex = state.menuOptions.length;
                 const prevIndex = state.menuSelectionIndex;
                 state.menuSelectionIndex = Math.max(0, state.menuSelectionIndex - 1);
                 
-                // Update visual highlight
                 if (prevIndex >= 0 && prevIndex < state.menuOptions.length) state.menuOptions[prevIndex].element.classList.remove('selected');
                 state.menuOptions[state.menuSelectionIndex].element.classList.add('selected');
                 
             } else if (state.appState === 'chat') {
-                // Chat History
                 if (state.historyIndex < state.commandHistory.length - 1) {
                     state.historyIndex++;
                     state.currentInput = state.commandHistory[state.historyIndex];
@@ -963,17 +929,14 @@ document.addEventListener('DOMContentLoaded', () => {
         } else if (e.key === 'ArrowDown') {
             e.preventDefault();
             if (state.menuOptions.length > 0) {
-                // Menu Navigation
                 const prevIndex = state.menuSelectionIndex;
                 state.menuSelectionIndex = Math.min(state.menuOptions.length - 1, state.menuSelectionIndex + 1);
 
-                // Update visual highlight
                 if (prevIndex >= 0) state.menuOptions[prevIndex].element.classList.remove('selected');
                 state.menuOptions[state.menuSelectionIndex].element.classList.add('selected');
 
             } else if (state.appState === 'chat') {
-                 // Chat History
-                if (state.historyIndex >= 0) { // Allow going to -1
+                if (state.historyIndex >= 0) {
                     state.historyIndex--;
                     state.currentInput = state.commandHistory[state.historyIndex];
                 } else {
@@ -985,7 +948,6 @@ document.addEventListener('DOMContentLoaded', () => {
             state.currentInput += e.key;
         }
 
-        // Visually update the input line, masking password if necessary
         if (state.subState === 'password' || state.subState === 'register_password') {
             inputLine.textContent = state.currentInput.replace(/./g, '*');
         } else {
@@ -994,25 +956,21 @@ document.addEventListener('DOMContentLoaded', () => {
         terminal.scrollTop = terminal.scrollHeight;
     });
 
-    // --- Initial Boot Sequence ---
     const boot = async () => {
         state.isExecuting = true;
         inputWrapper.style.display = 'none';
         await type("Booting AI Terminal...", 30);
         await new Promise(r => setTimeout(r, 500));
 
-        // Check for a saved session in localStorage
         const savedUser = localStorage.getItem('currentUser');
         if (savedUser) {
             state.currentUser = JSON.parse(savedUser);
             await type(`Resuming session for ${state.currentUser.username}...`, 30);
 
-            // For registered users, try to sync with the server. For guests, just load.
             if (state.currentUser.username !== 'Guest') {
                 await type("Syncing session with server...", 30);
                 const response = await fetch('/api/user_data');
                 if (response.ok) {
-                    // Server session is valid, get the latest data
                     state.currentUser = await response.json();
                     applyPreferences();
                     localStorage.setItem('currentUser', JSON.stringify(state.currentUser));
@@ -1020,13 +978,12 @@ document.addEventListener('DOMContentLoaded', () => {
                     await new Promise(r => setTimeout(r, 1000));
                     await showMainMenu();
                 } else {
-                    // Server session expired or is invalid. Clear local data and force re-login.
                     await type("Server session expired. Please log in again. ⚠️");
                     localStorage.removeItem('currentUser');
                     await new Promise(r => setTimeout(r, 1000));
                     await showLoginScreen();
                 }
-            } else { // Guest user
+            } else {
                 await type("Guest session restored. ✅");
                 applyPreferences();
                 await new Promise(r => setTimeout(r, 1000));
