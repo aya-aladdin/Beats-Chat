@@ -20,7 +20,13 @@ document.addEventListener('DOMContentLoaded', () => {
         menuOptions: [],
         menuSelectionIndex: -1,
         chatHistory: [],
-        roleplaySessionId: null
+        roleplaySessionId: null,
+        globalChat: {
+            lastId: -1,
+            pollingInterval: null,
+            users: [],
+            tagging: { active: false, index: 0, filter: '' }
+        }
     };
 
     const PERSONAS = {
@@ -39,6 +45,12 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     const PROMPT = `&gt;`;
+
+    const tagDropdown = document.createElement('div');
+    tagDropdown.id = 'tag-dropdown';
+    tagDropdown.style.cssText = 'position: absolute; bottom: 100%; left: 0; background: #111; border: 1px solid #444; display: none; z-index: 1000; min-width: 150px; flex-direction: column;';
+    inputWrapper.style.position = 'relative';
+    inputWrapper.appendChild(tagDropdown);
 
     const focusInput = () => hiddenInput.focus();
     terminal.addEventListener('click', () => {
@@ -84,7 +96,7 @@ document.addEventListener('DOMContentLoaded', () => {
             
             if (state.appState === 'chat') {
                 createChatBubble(displayCommand, 'user');
-            } else {
+            } else if (state.appState !== 'global_chat') {
                 addToOutput(`${PROMPT} ${displayCommand}`);
             }
 
@@ -105,6 +117,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 case 'roleplay_setup': await handleRoleplaySetup(commandToProcess); break;
                 case 'set_ai_name': await handleSetAiName(commandToProcess); break;
                 case 'set_icon': await handleSetIcon(commandToProcess); break;
+                case 'global_chat': await handleGlobalChat(commandToProcess); break;
             }
         } catch (error) {
             await type(`\nError executing command: ${error.message}`);
@@ -240,7 +253,8 @@ document.addEventListener('DOMContentLoaded', () => {
         await printMenuOption("3", "[3] Beats & Upgrades");
         await printMenuOption("4", "[4] Settings");
         await printMenuOption("5", "[5] Profile Stats");
-        await printMenuOption("6", "[6] Exit");
+        await printMenuOption("6", "[6] Global Chat 🌎");
+        await printMenuOption("7", "[7] Exit");
     }
 
     async function handleMenu(command) {
@@ -297,6 +311,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 await type("\nType 'exit' to return to menu.");
                 break;
             case '6':
+                await enterGlobalChat();
+                break;
+            case '7':
             case 'exit':
                 await type("Logging out...");
                 localStorage.removeItem('currentUser');
@@ -321,6 +338,139 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
         await fetchAIResponse(command, false, null);
+    }
+
+    async function enterGlobalChat() {
+        if (!state.currentUser) return;
+        state.appState = 'global_chat';
+        clearScreen();
+        await type("Connecting to Global Chat...", 30);
+        
+        try {
+            const res = await fetch('/api/global/join', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    username: state.currentUser.username,
+                    icon: state.currentUser.icon || '👤'
+                })
+            });
+            
+            if (res.ok) {
+                const data = await res.json();
+                await type("Connected! Commands: /me [action], /whisper [user] [msg], @[tag]");
+                await type("Type 'exit' to leave.");
+                state.globalChat.lastId = data.last_id || -1;
+                state.globalChat.pollingInterval = setInterval(pollGlobalChat, 2000);
+                pollGlobalChat();
+            } else {
+                await type("Failed to join global chat.");
+                await showMainMenu();
+            }
+        } catch (e) {
+            await type(`Error: ${e.message}`);
+            await showMainMenu();
+        }
+    }
+
+    async function handleGlobalChat(command) {
+        if (command.toLowerCase() === 'exit') {
+            await leaveGlobalChat();
+            return;
+        }
+        try {
+            await fetch('/api/global/send', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    username: state.currentUser.username,
+                    content: command,
+                    icon: state.currentUser.icon || '👤'
+                })
+            });
+            setTimeout(pollGlobalChat, 100);
+        } catch (e) {
+            addToOutput(`<span class="text-red-500">Error sending message: ${e.message}</span>`);
+        }
+    }
+
+    async function leaveGlobalChat() {
+        if (state.globalChat.pollingInterval) clearInterval(state.globalChat.pollingInterval);
+        tagDropdown.style.display = 'none';
+        try {
+            await fetch('/api/global/leave', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ username: state.currentUser.username })
+            });
+        } catch(e) {}
+        await showMainMenu();
+    }
+
+    async function pollGlobalChat() {
+        if (state.appState !== 'global_chat') return;
+        try {
+            const res = await fetch(`/api/global/poll?username=${encodeURIComponent(state.currentUser.username)}&last_id=${state.globalChat.lastId}`);
+            if (res.ok) {
+                const data = await res.json();
+                state.globalChat.users = data.users || [];
+                
+                data.messages.forEach(msg => {
+                    if (msg.id > state.globalChat.lastId) {
+                        state.globalChat.lastId = msg.id;
+                        renderGlobalMessage(msg);
+                    }
+                });
+                if (state.globalChat.tagging.active) updateTagDropdown();
+            }
+        } catch (e) { console.error(e); }
+    }
+
+    function renderGlobalMessage(msg) {
+        const div = document.createElement('div');
+        const time = new Date(msg.timestamp * 1000).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+        
+        if (msg.type === 'system') {
+            div.innerHTML = `<span style="color: #666;">[${time}] SYSTEM: ${msg.content}</span>`;
+        } else if (msg.type === 'action') {
+            div.innerHTML = `<span style="color: #aaddff;">[${time}] * ${msg.icon} ${msg.sender} ${msg.content}</span>`;
+        } else if (msg.type === 'whisper') {
+             div.innerHTML = `<span style="color: #ffaaee;">[${time}] 🔒 ${msg.icon} ${msg.sender} whispers: ${msg.content}</span>`;
+        } else {
+            let content = msg.content;
+            if (content.includes(`@${state.currentUser.username}`)) {
+                div.style.backgroundColor = 'rgba(255, 255, 0, 0.1)';
+            }
+            div.innerHTML = `[${time}] ${msg.icon} <b>${msg.sender}</b>: ${content}`;
+        }
+        output.appendChild(div);
+        terminal.scrollTop = terminal.scrollHeight;
+    }
+
+    function updateTagDropdown() {
+        const users = state.globalChat.users.filter(u => u.username.toLowerCase().startsWith(state.globalChat.tagging.filter.toLowerCase()));
+        tagDropdown.innerHTML = '';
+        if (users.length === 0) { tagDropdown.style.display = 'none'; return; }
+        
+        tagDropdown.style.display = 'flex';
+        users.forEach((u, idx) => {
+            const div = document.createElement('div');
+            div.className = 'menu-option';
+            if (idx === state.globalChat.tagging.index) div.classList.add('selected');
+            div.innerHTML = `${u.icon} ${u.username}`;
+            div.onclick = () => completeTag(u.username);
+            tagDropdown.appendChild(div);
+        });
+    }
+
+    function completeTag(username) {
+        const parts = state.currentInput.split('@');
+        parts.pop();
+        state.currentInput = parts.join('@') + '@' + username + ' ';
+        inputLine.textContent = state.currentInput;
+        state.globalChat.tagging.active = false;
+        tagDropdown.style.display = 'none';
+        focusInput();
     }
 
     const getPersonaPrompt = () => {
@@ -962,6 +1112,29 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
+        if (state.appState === 'global_chat' && state.globalChat.tagging.active) {
+            if (e.key === 'ArrowUp') {
+                e.preventDefault();
+                state.globalChat.tagging.index = Math.max(0, state.globalChat.tagging.index - 1);
+                updateTagDropdown();
+                return;
+            }
+            if (e.key === 'ArrowDown') {
+                e.preventDefault();
+                state.globalChat.tagging.index = Math.min(state.globalChat.users.length - 1, state.globalChat.tagging.index + 1);
+                updateTagDropdown();
+                return;
+            }
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                const filtered = state.globalChat.users.filter(u => u.username.toLowerCase().startsWith(state.globalChat.tagging.filter.toLowerCase()));
+                if (filtered[state.globalChat.tagging.index]) {
+                    completeTag(filtered[state.globalChat.tagging.index].username);
+                }
+                return;
+            }
+        }
+
         if (e.key === 'Enter') {
             if (state.menuOptions.length > 0 && state.menuSelectionIndex !== -1) {
                 const selected = state.menuOptions[state.menuSelectionIndex];
@@ -1010,6 +1183,18 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         } else if (e.key.length === 1 && !e.ctrlKey && !e.metaKey) {
             state.currentInput += e.key;
+        }
+
+        if (state.appState === 'global_chat') {
+            const match = state.currentInput.match(/@(\w*)$/);
+            if (match) {
+                state.globalChat.tagging.active = true;
+                state.globalChat.tagging.filter = match[1];
+                updateTagDropdown();
+            } else {
+                state.globalChat.tagging.active = false;
+                tagDropdown.style.display = 'none';
+            }
         }
 
         if (state.subState === 'password' || state.subState === 'register_password') {
