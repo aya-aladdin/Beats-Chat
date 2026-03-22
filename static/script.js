@@ -441,29 +441,41 @@ document.addEventListener('DOMContentLoaded', () => {
         clearScreen();
         addToOutput("<div class='text-gray-500'>=== GLOBAL CHAT ROOM ===<br>Type 'exit' to disconnect.</div><br>");
         
-        // Initial Fetch
+        await fetch('/api/global_chat/send', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ content: 'entered the chat', type: 'system' })
+        });
+
         await fetchGlobalMessages();
         
-        // Start Polling
         if (state.chatInterval) clearInterval(state.chatInterval);
         state.chatInterval = setInterval(fetchGlobalMessages, 2000);
     }
 
     async function handleGlobalChat(command) {
         if (command.toLowerCase() === 'exit') {
+            await fetch('/api/global_chat/send', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ content: 'left the chat', type: 'system' })
+            });
+            
             if (state.chatInterval) clearInterval(state.chatInterval);
             await showMainMenu();
             return;
         }
         
-        // Send Message
+        const isEmote = command.startsWith('@me ');
+        const content = isEmote ? command.substring(4).trim() : command;
+        const type = isEmote ? 'emote' : 'message';
+
         try {
             await fetch('/api/global_chat/send', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ content: command })
+                body: JSON.stringify({ content: content, type: type })
             });
-            // Immediate fetch to show your own message quickly
             await fetchGlobalMessages();
         } catch (e) {
             console.error(e);
@@ -471,7 +483,6 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     async function fetchGlobalMessages() {
-        // Don't fetch if we left the screen
         if (state.appState !== 'global_chat') {
             if (state.chatInterval) clearInterval(state.chatInterval);
             return;
@@ -482,26 +493,25 @@ document.addEventListener('DOMContentLoaded', () => {
             if (!res.ok) return;
             const msgs = await res.json();
             
-            // We just render the whole list for simplicity in this terminal view
-            // To prevent flickering, we only append new ones or replace if list changed drastically
-            // For now, let's clear and re-render only the message area.
-            // Actually, for a terminal, we usually just append. 
-            // But "Chat Room" implies seeing history.
-            // Let's implement a simple render:
-            
             const chatAreaId = 'global-chat-area';
             let chatArea = document.getElementById(chatAreaId);
             if (!chatArea) {
                 chatArea = document.createElement('div');
                 chatArea.id = chatAreaId;
-                // Insert before the input line area
                 output.innerHTML = "<div class='text-gray-500'>=== GLOBAL CHAT ROOM ===<br>Type 'exit' to disconnect.</div><br>";
                 output.appendChild(chatArea);
             }
             
             chatArea.innerHTML = msgs.map(m => {
+                if (m.type === 'system') {
+                    return `<div class="mb-1 text-gray-500 italic text-xs">* ${m.user} ${parseMarkdown(m.content)}</div>`;
+                }
+                
+                if (m.type === 'emote') {
+                    return `<div class="mb-1 text-cyan-600 italic">* ${m.user} ${parseMarkdown(m.content)}</div>`;
+                }
+
                 const isMe = m.user === state.currentUser?.username;
-                // Only show icon for myself, as requested
                 const iconHtml = (isMe && state.currentUser?.icon) ? `<span class="mr-2">${state.currentUser.icon}</span>` : '';
                 
                 return `<div class="mb-1"><span class="text-gray-500">[${m.time}]</span> ${iconHtml}<span class="font-bold text-cyan-400">${m.user}:</span> ${parseMarkdown(m.content)}</div>`;
@@ -706,7 +716,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const data = await response.json();
         await type(data.message || `Error: ${data.error}`);
         
-        await updateUserStats(); // Refresh local state
+        await updateUserStats();
         await new Promise(r => setTimeout(r, 1000));
         await showSettingsMenu();
         state.appState = 'settings';
@@ -896,7 +906,7 @@ document.addEventListener('DOMContentLoaded', () => {
             await type(`Failed: ${errorData.error}`);
             await type("Returning to upgrades menu...");
             await new Promise(r => setTimeout(r, 1500));
-            await handleMenu('4'); // Return to Beats menu
+            await handleMenu('4');
         }
     }
 

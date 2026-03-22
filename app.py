@@ -98,6 +98,7 @@ class GlobalMessage(db.Model):
     username = db.Column(db.String(20), nullable=False)
     content = db.Column(db.String(200), nullable=False)
     timestamp = db.Column(db.DateTime, default=datetime.utcnow)
+    msg_type = db.Column(db.String(10), default='message')
 
 @app.route('/')
 def index():
@@ -230,7 +231,6 @@ def set_icon():
 
     data = request.get_json()
     new_icon = data.get('icon', '').strip()
-    # Allow standard emojis (which can be a few bytes)
     if 1 <= len(new_icon) <= 10:
         user.icon = new_icon
         db.session.commit()
@@ -386,10 +386,8 @@ def unlock_global_chat():
 
 @app.route('/api/global_chat/messages', methods=['GET'])
 def get_global_messages():
-    # Return last 50 messages
     msgs = GlobalMessage.query.order_by(GlobalMessage.timestamp.desc()).limit(50).all()
-    # Reverse to show oldest first in the list
-    data = [{"user": m.username, "content": m.content, "time": m.timestamp.strftime("%H:%M")} for m in msgs[::-1]]
+    data = [{"user": m.username, "content": m.content, "type": m.msg_type, "time": m.timestamp.strftime("%H:%M")} for m in msgs[::-1]]
     return jsonify(data)
 
 @app.route('/api/global_chat/send', methods=['POST'])
@@ -400,9 +398,10 @@ def send_global_message():
     user = User.query.get(session['user_id'])
     data = request.get_json()
     content = data.get('content', '').strip()
+    msg_type = data.get('type', 'message')
     
     if content:
-        msg = GlobalMessage(username=user.username, content=content[:200])
+        msg = GlobalMessage(username=user.username, content=content[:200], msg_type=msg_type)
         db.session.add(msg)
         db.session.commit()
     return jsonify({"status": "sent"})
@@ -558,6 +557,13 @@ def check_and_migrate_db():
                 except Exception:
                     print("Migrating DB: Adding icon column...")
                     conn.execute(text("ALTER TABLE user ADD COLUMN icon VARCHAR(10) DEFAULT '👤'"))
+                    conn.commit()
+
+                try:
+                    conn.execute(text("SELECT msg_type FROM global_message LIMIT 1"))
+                except Exception:
+                    print("Migrating DB: Adding msg_type column to global_message...")
+                    conn.execute(text("ALTER TABLE global_message ADD COLUMN msg_type VARCHAR(10) DEFAULT 'message'"))
                     conn.commit()
     except Exception as e:
         print(f"Migration Warning: {e}")
