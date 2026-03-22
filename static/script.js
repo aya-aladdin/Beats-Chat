@@ -14,6 +14,7 @@ document.addEventListener('DOMContentLoaded', () => {
         isExecuting: false,
         currentUser: null,
         commandHistory: [],
+        chatHistory: JSON.parse(localStorage.getItem('chatHistory') || '[]'),
         historyIndex: -1,
         currentInput: "",
         abortController: new AbortController(),
@@ -300,12 +301,17 @@ document.addEventListener('DOMContentLoaded', () => {
 
     async function handleChat(command) {
         if (command.toLowerCase() === 'exit') {
+            // Clear current chat context when exiting
             await fetch('/api/reset_chat', { method: 'POST' });
+            state.chatHistory = [];
+            localStorage.removeItem('chatHistory');
             await showMainMenu();
             return;
         }
         if (command.toLowerCase() === 'clear') {
             clearScreen();
+            state.chatHistory = [];
+            localStorage.setItem('chatHistory', JSON.stringify(state.chatHistory));
             await type("AI Chat Interface. Type 'exit' to return to menu.");
             return;
         }
@@ -815,12 +821,23 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         
         let fullResponse = "";
+        
+        // Determine which history to send
+        let historyToSend = [];
+        if (state.appState === 'chat' && state.currentRpSessionId) {
+             const sessions = JSON.parse(localStorage.getItem(`rp_sessions_${state.currentUser.username}`) || '[]');
+             const session = sessions.find(s => s.id === state.currentRpSessionId);
+             if (session) historyToSend = session.history;
+        } else {
+             historyToSend = state.chatHistory;
+        }
 
         try {
             const response = await fetch('/api/chat', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
+                    history: historyToSend,
                     prompt: isRegen ? null : prompt,
                     regenerate: isRegen,
                     persona: state.currentUser?.persona,
@@ -870,6 +887,7 @@ document.addEventListener('DOMContentLoaded', () => {
             
             await updateUserStats();
 
+            // Save history locally
             if (state.appState === 'chat' && state.currentRpSessionId) {
                  const sessions = JSON.parse(localStorage.getItem(`rp_sessions_${state.currentUser.username}`) || '[]');
                  const session = sessions.find(s => s.id === state.currentRpSessionId);
@@ -878,6 +896,10 @@ document.addEventListener('DOMContentLoaded', () => {
                      session.history.push({ role: 'assistant', content: fullResponse });
                      localStorage.setItem(`rp_sessions_${state.currentUser.username}`, JSON.stringify(sessions));
                  }
+            } else {
+                 if (!isRegen) state.chatHistory.push({ role: 'user', content: prompt });
+                 state.chatHistory.push({ role: 'assistant', content: fullResponse });
+                 localStorage.setItem('chatHistory', JSON.stringify(state.chatHistory));
             }
 
         } catch (error) {
@@ -1224,6 +1246,17 @@ document.addEventListener('DOMContentLoaded', () => {
         inputWrapper.style.display = 'none';
         await type("Booting AI Terminal...", 30);
         await new Promise(r => setTimeout(r, 500));
+        
+        // Restore simple chat if exists
+        if (state.chatHistory.length > 0 && state.appState === 'chat' && !state.currentRpSessionId) {
+             state.chatHistory.forEach(msg => {
+                 if (msg.role === 'user') {
+                     // We don't reprint user msgs on boot usually, or maybe we should? 
+                     // Logic below mostly for Resume Session. For now, we trust the flow.
+                 }
+             });
+             // Actually, usually we start fresh or load menu. 
+        }
 
         const savedUser = localStorage.getItem('currentUser');
         if (savedUser) {
