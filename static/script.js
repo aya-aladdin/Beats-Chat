@@ -69,7 +69,7 @@ document.addEventListener('DOMContentLoaded', () => {
             
             if (state.appState === 'chat') {
                 createChatBubble(displayCommand, 'user');
-            } else {
+            } else if (state.appState !== 'global_chat') {
                 addToOutput(`${PROMPT} ${displayCommand}`);
             }
 
@@ -90,6 +90,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 case 'accessibility': await handleAccessibility(commandToProcess); break;
                 case 'roleplay_setup': await handleRoleplaySetup(commandToProcess); break;
                 case 'set_ai_name': await handleSetAiName(commandToProcess); break;
+                case 'set_icon': await handleSetIcon(commandToProcess); break;
             }
         } catch (error) {
             await type(`\nError executing command: ${error.message}`);
@@ -119,7 +120,7 @@ document.addEventListener('DOMContentLoaded', () => {
         switch (state.subState) {
             case 'prompt':
                 if (choice === '1') {
-                    state.currentUser = { username: 'Guest', chats_sent: 0, beats: 0, roleplay_unlocked: false, global_chat_unlocked: false, persona: 'helpful', ai_name: 'AI', roleplay_chats_required: 3, global_chat_req: 5, theme: 'default', font_size: 'normal', response_length: 'balanced' };
+                    state.currentUser = { username: 'Guest', chats_sent: 0, beats: 0, roleplay_unlocked: false, global_chat_unlocked: false, persona: 'helpful', ai_name: 'AI', icon: '👤', roleplay_chats_required: 3, global_chat_req: 5, theme: 'default', font_size: 'normal', response_length: 'balanced' };
                     localStorage.setItem('currentUser', JSON.stringify(state.currentUser));
                     applyPreferences();
 
@@ -498,9 +499,13 @@ document.addEventListener('DOMContentLoaded', () => {
                 output.appendChild(chatArea);
             }
             
-            chatArea.innerHTML = msgs.map(m => 
-                `<div class="mb-1"><span class="text-gray-500">[${m.time}]</span> <span class="font-bold text-cyan-400">${m.user}:</span> ${parseMarkdown(m.content)}</div>`
-            ).join('');
+            chatArea.innerHTML = msgs.map(m => {
+                const isMe = m.user === state.currentUser?.username;
+                // Only show icon for myself, as requested
+                const iconHtml = (isMe && state.currentUser?.icon) ? `<span class="mr-2">${state.currentUser.icon}</span>` : '';
+                
+                return `<div class="mb-1"><span class="text-gray-500">[${m.time}]</span> ${iconHtml}<span class="font-bold text-cyan-400">${m.user}:</span> ${parseMarkdown(m.content)}</div>`;
+            }).join('');
             
             terminal.scrollTop = terminal.scrollHeight;
         } catch (e) {
@@ -544,6 +549,7 @@ document.addEventListener('DOMContentLoaded', () => {
         await printMenuOption("1", "[1] Persona Settings");
         await printMenuOption("2", `[2] Change AI Name (Current: ${state.currentUser?.ai_name || 'AI'})`);
         await printMenuOption("3", "[3] Accessibility (Size, Theme, Length)");
+        await printMenuOption("4", `[4] Set User Icon (Current: ${state.currentUser?.icon || '👤'})`);
         await type("\nType a number, use arrow keys, or 'exit'.");
     }
 
@@ -572,6 +578,15 @@ document.addEventListener('DOMContentLoaded', () => {
                 state.appState = 'accessibility';
                 clearScreen();
                 await showAccessibilityMenu();
+                break;
+            case '4':
+                if (state.currentUser.username === 'Guest') {
+                    await type("Guests cannot set a custom icon. Please register.");
+                    return;
+                }
+                state.appState = 'set_icon';
+                await type("Select your Icon.");
+                await type("Type or Paste an Emoji (Win: Win+.; Mac: Cmd+Ctrl+Space):");
                 break;
             case 'exit':
                 await showMainMenu();
@@ -668,6 +683,35 @@ document.addEventListener('DOMContentLoaded', () => {
             state.appState = 'settings';
         }
     }
+
+    async function handleSetIcon(command) {
+        const newIcon = command.trim();
+        if (newIcon.toLowerCase() === 'exit') {
+            await showSettingsMenu();
+            state.appState = 'settings';
+            return;
+        }
+        
+        // Simple check for emoji-ish length (1-2 chars usually, but some are complex)
+        if (newIcon.length > 5 && !newIcon.match(/\p{Emoji}/u)) {
+             await type("That looks too long. Please try a single emoji.");
+             return;
+        }
+
+        const response = await fetch('/api/set_icon', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ icon: newIcon })
+        });
+        const data = await response.json();
+        await type(data.message || `Error: ${data.error}`);
+        
+        await updateUserStats(); // Refresh local state
+        await new Promise(r => setTimeout(r, 1000));
+        await showSettingsMenu();
+        state.appState = 'settings';
+    }
+
     async function handlePersona(command) {
         const choice = command.trim();
         let personaKey = null;

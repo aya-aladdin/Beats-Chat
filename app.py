@@ -63,6 +63,7 @@ class User(db.Model):
     roleplay_unlocked = db.Column(db.Boolean, default=False)
     global_chat_unlocked = db.Column(db.Boolean, default=False)
     ai_name = db.Column(db.String(20), nullable=False, default='AI')
+    icon = db.Column(db.String(10), default='👤')
     font_size = db.Column(db.String(20), default='normal')
     theme = db.Column(db.String(20), default='default')
     response_length = db.Column(db.String(20), default='balanced')
@@ -76,6 +77,7 @@ class User(db.Model):
             "global_chat_unlocked": self.global_chat_unlocked,
             "persona": session.get('persona', DEFAULT_PERSONA),
             "ai_name": self.ai_name,
+            "icon": self.icon,
             "roleplay_chats_required": ROLEPLAY_CHATS_REQUIRED,
             "global_chat_req": GLOBAL_CHAT_REQ,
             "font_size": self.font_size,
@@ -216,6 +218,24 @@ def set_ai_name():
         db.session.commit()
         return jsonify({"message": f"AI name changed to {new_name}."})
     return jsonify({"error": "Name must be between 1 and 20 characters."}), 400
+
+@app.route('/api/set_icon', methods=['POST'])
+def set_icon():
+    if 'user_id' not in session:
+        return jsonify({"error": "Not logged in"}), 401
+
+    user = User.query.get(session['user_id'])
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+
+    data = request.get_json()
+    new_icon = data.get('icon', '').strip()
+    # Allow standard emojis (which can be a few bytes)
+    if 1 <= len(new_icon) <= 10:
+        user.icon = new_icon
+        db.session.commit()
+        return jsonify({"message": f"Icon updated to {new_icon}"})
+    return jsonify({"error": "Invalid icon."}), 400
 
 @app.route('/api/chat', methods=['POST'])
 def chat_proxy():
@@ -531,6 +551,13 @@ def check_and_migrate_db():
                 except Exception:
                     print("Migrating DB: Adding global_chat_unlocked column...")
                     conn.execute(text("ALTER TABLE user ADD COLUMN global_chat_unlocked BOOLEAN DEFAULT 0"))
+                    conn.commit()
+
+                try:
+                    conn.execute(text("SELECT icon FROM user LIMIT 1"))
+                except Exception:
+                    print("Migrating DB: Adding icon column...")
+                    conn.execute(text("ALTER TABLE user ADD COLUMN icon VARCHAR(10) DEFAULT '👤'"))
                     conn.commit()
     except Exception as e:
         print(f"Migration Warning: {e}")
