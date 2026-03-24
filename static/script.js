@@ -43,7 +43,7 @@ document.addEventListener('DOMContentLoaded', () => {
     inputWrapper.style.borderTop = '1px solid #333';
     inputWrapper.style.zIndex = '1000';
     inputWrapper.style.boxSizing = 'border-box';
-    output.style.paddingBottom = '200px';
+    output.style.paddingBottom = '150px';
     inputLine.style.fontSize = '0.9rem';
 
     hiddenInput.addEventListener('input', () => {
