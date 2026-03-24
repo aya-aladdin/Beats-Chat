@@ -41,7 +41,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 tagDropdown.style.display = 'none';
             }
         }
-        terminal.scrollTop = terminal.scrollHeight;
+        scrollToBottom();
     });
 
     let state = {
@@ -123,6 +123,12 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     };
 
+    const scrollToBottom = () => {
+        const inputHeight = (inputWrapper.style.display !== 'none') ? inputWrapper.offsetHeight : 0;
+        const targetScroll = output.offsetTop + output.scrollHeight + inputHeight - terminal.clientHeight;
+        terminal.scrollTop = Math.max(0, targetScroll);
+    };
+
     const focusInput = () => hiddenInput.focus();
     terminal.addEventListener('click', () => {
         if (window.getSelection().toString().length === 0) focusInput();
@@ -133,7 +139,7 @@ document.addEventListener('DOMContentLoaded', () => {
         for (let i = 0; i < text.length; i++) {
             const char = (state.appState === 'login' && (state.subState === 'password' || state.subState === 'register_password')) ? '*' : text.charAt(i);
             element.innerHTML += char;
-            terminal.scrollTop = terminal.scrollHeight;
+            scrollToBottom();
             await new Promise(resolve => setTimeout(resolve, Math.random() * delay));
         }
         return element;
@@ -148,7 +154,7 @@ document.addEventListener('DOMContentLoaded', () => {
             processCommand(key);
         };
         output.appendChild(div);
-        terminal.scrollTop = terminal.scrollHeight;
+        scrollToBottom();
         
         state.menuOptions.push({ key, element: div, action: () => processCommand(key) });
         await new Promise(resolve => setTimeout(resolve, 50));
@@ -528,7 +534,7 @@ document.addEventListener('DOMContentLoaded', () => {
             div.innerHTML = `[${time}] ${msg.icon} <b>${msg.sender}</b>: ${content}`;
         }
         output.appendChild(div);
-        terminal.scrollTop = terminal.scrollHeight;
+        scrollToBottom();
     }
 
     function updateTagDropdown() {
@@ -999,14 +1005,14 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (responseElement && now - lastUpdate > 50) {
                     const contentDiv = responseElement.querySelector('.msg-content');
                     if (contentDiv) contentDiv.innerHTML = parseMarkdown(fullResponse);
-                    terminal.scrollTop = terminal.scrollHeight;
+                    scrollToBottom();
                     lastUpdate = now;
                 }
             }
             
             const finalContentDiv = responseElement ? responseElement.querySelector('.msg-content') : null;
             if (finalContentDiv) finalContentDiv.innerHTML = parseMarkdown(fullResponse);
-            terminal.scrollTop = terminal.scrollHeight;
+            scrollToBottom();
             
             if (responseElement && !responseElement.versions) {
                 responseElement.versions = [];
@@ -1094,7 +1100,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const div = document.createElement('div');
         div.innerHTML = html;
         output.appendChild(div);
-        terminal.scrollTop = terminal.scrollHeight;
+        scrollToBottom();
     };
 
     const createResponseElement = () => {
@@ -1119,7 +1125,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         output.appendChild(div);
-        terminal.scrollTop = terminal.scrollHeight;
+        scrollToBottom();
         return div;
     };
 
