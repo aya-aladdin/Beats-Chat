@@ -87,7 +87,8 @@ document.addEventListener('DOMContentLoaded', () => {
             users: [],
             tagging: { active: false, index: 0, filter: '' },
             isPolling: false,
-            needsUpdate: false
+            needsUpdate: false,
+            onlineUsersElement: null
         }
     };
 
@@ -460,6 +461,7 @@ document.addEventListener('DOMContentLoaded', () => {
         clearScreen();
         state.globalChat.isPolling = false;
         state.globalChat.needsUpdate = false;
+        state.globalChat.onlineUsersElement = null;
         terminal.classList.add('chat-mode');
         await type("Connecting to Global Chat...", 30);
         
@@ -483,7 +485,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         const pollData = await pollRes.json();
                         state.globalChat.users = pollData.users || [];
                         const userStr = state.globalChat.users.map(u => `${u.icon} ${u.username}`).join(', ');
-                        await type(`Online Users: ${userStr}`, 10);
+                        state.globalChat.onlineUsersElement = await type(`Online Users: ${userStr}`, 10);
                     }
                 } catch (e) {}
 
@@ -554,6 +556,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 const data = await res.json();
                 state.globalChat.users = data.users || [];
                 
+                if (state.globalChat.onlineUsersElement) {
+                    const userStr = state.globalChat.users.map(u => `${u.icon} ${u.username}`).join(', ');
+                    state.globalChat.onlineUsersElement.textContent = `Online Users: ${userStr}`;
+                }
+                
                 data.messages.forEach(msg => {
                     if (msg.id > state.globalChat.lastId) {
                         state.globalChat.lastId = msg.id;
@@ -587,7 +594,11 @@ document.addEventListener('DOMContentLoaded', () => {
             if (content.includes(`@${state.currentUser.username}`)) {
                 div.style.backgroundColor = 'rgba(255, 255, 0, 0.1)';
             }
-            div.innerHTML = `[${time}] <b style="color: #99bbff;">${msg.icon} ${msg.sender}</b>: ${content}`;
+            if (msg.sender === state.currentUser.username) {
+                div.innerHTML = `[${time}] <b style="color: #99bbff;">${msg.icon} ${msg.sender}</b>: ${content}`;
+            } else {
+                div.innerHTML = `[${time}] <b>${msg.sender}</b>: ${content}`;
+            }
         }
         output.appendChild(div);
         scrollToBottom();
