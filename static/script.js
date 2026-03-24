@@ -13,6 +13,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const hiddenInput = document.getElementById('hidden-input');
     const sidebar = document.getElementById('sidebar');
     const sidebarContent = document.getElementById('sidebar-content');
+    const mobileNewChatBtn = document.getElementById('mobile-new-chat-btn');
 
     hiddenInput.style.opacity = '0';
     hiddenInput.style.position = 'fixed';
@@ -663,6 +664,7 @@ document.addEventListener('DOMContentLoaded', () => {
             
             if (sessions.length > 0) {
                 sidebar.classList.remove('hidden');
+                mobileNewChatBtn.classList.remove('hidden');
                 
                 const header = document.createElement('div');
                 header.className = "text-xs mb-2 text-gray-500 italic";
@@ -680,6 +682,8 @@ document.addEventListener('DOMContentLoaded', () => {
                     div.onclick = () => loadRoleplaySession(session.id);
                     sidebarContent.appendChild(div);
                 });
+            } else {
+                mobileNewChatBtn.classList.add('hidden');
             }
         } catch (e) {
             console.error("Failed to load sessions", e);
@@ -1286,6 +1290,11 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     window.addEventListener('resize', () => scrollToBottom());
+
+    mobileNewChatBtn.addEventListener('click', () => {
+        sidebar.classList.add('hidden');
+        focusInput();
+    });
 
     const boot = async () => {
         state.isExecuting = true;
