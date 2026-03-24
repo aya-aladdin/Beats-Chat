@@ -85,7 +85,9 @@ document.addEventListener('DOMContentLoaded', () => {
             lastId: -1,
             pollingInterval: null,
             users: [],
-            tagging: { active: false, index: 0, filter: '' }
+            tagging: { active: false, index: 0, filter: '' },
+            isPolling: false,
+            needsUpdate: false
         }
     };
 
@@ -456,6 +458,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
         state.appState = 'global_chat';
         clearScreen();
+        state.globalChat.isPolling = false;
+        state.globalChat.needsUpdate = false;
         terminal.classList.add('chat-mode');
         await type("Connecting to Global Chat...", 30);
         
@@ -516,7 +520,11 @@ document.addEventListener('DOMContentLoaded', () => {
                     icon: state.currentUser.icon || '👤'
                 })
             });
-            setTimeout(pollGlobalChat, 100);
+            
+            if (state.globalChat.pollingInterval) clearTimeout(state.globalChat.pollingInterval);
+            
+            state.globalChat.needsUpdate = true;
+            if (!state.globalChat.isPolling) pollGlobalChat();
         } catch (e) {
             addToOutput(`<span class="text-red-500">Error sending message: ${e.message}</span>`);
         }
@@ -537,6 +545,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
     async function pollGlobalChat() {
         if (state.appState !== 'global_chat') return;
+        if (state.globalChat.isPolling) return;
+        
+        state.globalChat.isPolling = true;
         try {
             const res = await fetch(`/api/global/poll?username=${encodeURIComponent(state.currentUser.username)}&last_id=${state.globalChat.lastId}`);
             if (res.ok) {
@@ -552,7 +563,13 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (state.globalChat.tagging.active) updateTagDropdown();
             }
         } catch (e) { console.error(e); }
-        if (state.appState === 'global_chat') state.globalChat.pollingInterval = setTimeout(pollGlobalChat, 2000);
+        
+        state.globalChat.isPolling = false;
+        if (state.appState === 'global_chat') {
+            const delay = state.globalChat.needsUpdate ? 100 : 2000;
+            state.globalChat.needsUpdate = false;
+            state.globalChat.pollingInterval = setTimeout(pollGlobalChat, delay);
+        }
     }
 
     function renderGlobalMessage(msg) {
