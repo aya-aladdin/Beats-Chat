@@ -2,6 +2,10 @@ from flask import Flask, render_template, request, Response, stream_with_context
 import requests
 import json
 import time
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
 
 app = Flask(__name__)
 
@@ -24,7 +28,7 @@ def chat_proxy():
         try:
             url = "https://ai.hackclub.com/proxy/v1/chat/completions"
             headers = {
-                "Authorization": "Bearer sk-hc-v1-aad18691f5b94ed8ae959cdbaf95600ea2df3328179a449097e83188c5183a91",
+                "Authorization": f"Bearer {os.getenv('HACK_CLUB_API_KEY')}",
                 "Content-Type": "application/json"
             }
             payload = {
