@@ -1,4 +1,11 @@
 document.addEventListener('DOMContentLoaded', () => {
+    if (!document.querySelector('meta[name="viewport"]')) {
+        const meta = document.createElement('meta');
+        meta.name = "viewport";
+        meta.content = "width=device-width, initial-scale=1, maximum-scale=1, user-scalable=0, viewport-fit=cover";
+        document.head.appendChild(meta);
+    }
+
     const output = document.getElementById('output');
     const inputLine = document.getElementById('input-line');
     const inputWrapper = document.getElementById('input-wrapper');
@@ -19,6 +26,7 @@ document.addEventListener('DOMContentLoaded', () => {
     hiddenInput.setAttribute('autocapitalize', 'off');
     hiddenInput.setAttribute('spellcheck', 'false');
     hiddenInput.setAttribute('autocomplete', 'off');
+    hiddenInput.setAttribute('enterkeyhint', 'send');
 
     inputLine.style.direction = 'ltr';
     inputLine.style.textTransform = 'none';
@@ -1276,6 +1284,8 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }
     });
+
+    window.addEventListener('resize', () => scrollToBottom());
 
     const boot = async () => {
         state.isExecuting = true;
