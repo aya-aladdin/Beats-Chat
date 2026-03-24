@@ -8,8 +8,11 @@ document.addEventListener('DOMContentLoaded', () => {
     const sidebarContent = document.getElementById('sidebar-content');
 
     hiddenInput.style.opacity = '0';
-    hiddenInput.style.position = 'absolute';
-    hiddenInput.style.zIndex = '-1';
+    hiddenInput.style.position = 'fixed';
+    hiddenInput.style.top = '0';
+    hiddenInput.style.left = '0';
+    hiddenInput.style.fontSize = '16px'; 
+    hiddenInput.style.pointerEvents = 'none';
     hiddenInput.addEventListener('input', () => {
         state.currentInput = hiddenInput.value;
         if (state.appState === 'login' && (state.subState === 'password' || state.subState === 'register_password')) {
@@ -147,6 +150,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const commandToProcess = command;
             state.currentInput = "";
             inputLine.textContent = "";
+            hiddenInput.value = "";
             state.menuOptions = [];
             state.menuSelectionIndex = -1;
 
