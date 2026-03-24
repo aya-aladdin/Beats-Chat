@@ -222,6 +222,7 @@ document.addEventListener('DOMContentLoaded', () => {
         state.appState = 'login';
         state.subState = 'prompt';
         state.currentUser = null;
+        terminal.classList.remove('chat-mode');
         clearScreen();
         await type("Welcome back, operator.");
         await type("Login as:");
@@ -333,6 +334,7 @@ document.addEventListener('DOMContentLoaded', () => {
     async function showMainMenu() {
         state.appState = 'menu';
         state.subState = 'prompt';
+        terminal.classList.remove('chat-mode');
         clearScreen();
         const roleplayStatus = state.currentUser?.roleplay_unlocked ? "UNLOCKED ✅" : "LOCKED 🔒";
         await type("=== MAIN MENU ===");
@@ -349,6 +351,7 @@ document.addEventListener('DOMContentLoaded', () => {
         switch(command.trim().toLowerCase()) {
             case '1':
                 state.appState = 'chat';
+                terminal.classList.add('chat-mode');
                 state.chatHistory = [];
                 clearScreen();
                 await type("AI Chat Interface. Type 'exit' to return to menu.");
@@ -438,6 +441,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         state.appState = 'global_chat';
         clearScreen();
+        terminal.classList.add('chat-mode');
         await type("Connecting to Global Chat...", 30);
         
         try {
@@ -626,6 +630,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         state.appState = 'chat';
                         sidebar.classList.add('hidden');
                         clearScreen();
+                        terminal.classList.add('chat-mode');
                         await type("=== ROLEPLAY STARTED ===");
                         
                         createChatBubble(opener, 'ai');
@@ -703,6 +708,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 
                 sidebar.classList.add('hidden');
                 clearScreen();
+                terminal.classList.add('chat-mode');
                 await type("=== SESSION RESTORED ===");
                 
                 if (state.chatHistory) {

@@ -340,7 +340,7 @@ body.bg-black {
         align-items: center;
     }
 
-    #output {
+    #terminal.chat-mode #output {
         margin-top: auto;
     }
 
