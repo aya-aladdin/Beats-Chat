@@ -312,12 +312,15 @@ body.bg-black {
     #terminal {
         flex: 1;
         width: 100%;
+        max-width: 100vw;
         height: 100%;
         padding: 15px;
         padding-bottom: 90px;
         overflow-y: auto;
         box-sizing: border-box;
         -webkit-overflow-scrolling: touch;
+        display: flex;
+        flex-direction: column;
     }
 
     #input-wrapper {
@@ -335,6 +338,10 @@ body.bg-black {
         backdrop-filter: blur(10px);
         -webkit-backdrop-filter: blur(10px);
         align-items: center;
+    }
+
+    #output {
+        margin-top: auto;
     }
 
     #input-line {
